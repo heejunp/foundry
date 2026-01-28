@@ -1,6 +1,6 @@
 # Foundry
 
-**Foundry**는 개인 Kubernetes 클러스터에서 실행되는 Private PaaS(Platform as a Service)입니다. Vercel과 유사한 배포 경험을 제공하며, GitHub OAuth 인증, 프로젝트 관리, 실시간 빌드 로그 스트리밍 등을 지원합니다.
+**Foundry**는 개인 Kubernetes 클러스터에서 실행되는 Private PaaS(Platform as a Service)입니다.
 
 ## 🚀 Features
 
@@ -62,123 +62,11 @@ foundry/
 └── README.md
 ```
 
-## 🛠️ Setup & Installation
-
 ### Prerequisites
 - **Docker** (for PostgreSQL)
 - **Node.js** 18+ (for frontend)
 - **Go** 1.21+ (for backend)
 - **GitHub OAuth App** (Client ID & Secret)
-
-### 1. Database Setup
-```bash
-# Start PostgreSQL container
-docker run -d \
-  --name foundry-db \
-  -e POSTGRES_USER=park \
-  -e POSTGRES_PASSWORD=yourpassword \
-  -e POSTGRES_DB=foundry \
-  -p 5432:5432 \
-  postgres:15
-
-# Apply schema
-cat server/schema.sql | docker exec -i foundry-db psql -U park -d foundry
-
-# (Optional) Seed mock data
-cat server/seed.sql | docker exec -i foundry-db psql -U park -d foundry
-```
-
-### 2. Backend Setup
-```bash
-cd server
-
-# Create .env file
-cat > .env << EOF
-GITHUB_CLIENT_ID=your_github_client_id
-GITHUB_CLIENT_SECRET=your_github_client_secret
-EOF
-
-# Install dependencies
-go mod download
-
-# Run server
-go run cmd/api/main.go
-```
-
-Server will start on `http://localhost:8080`
-
-### 3. Frontend Setup
-```bash
-cd client
-
-# Install dependencies
-npm install
-
-# Run dev server
-npm run dev
-```
-
-Frontend will start on `http://localhost:5173`
-
-## 🔐 GitHub OAuth Setup
-
-1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
-2. Create a new OAuth App
-3. Set **Authorization callback URL** to: `http://localhost:8080/auth/github/callback`
-4. Copy **Client ID** and **Client Secret** to `server/.env`
-
-## 🎯 Usage
-
-### First Time Login
-1. Visit `http://localhost:5173/login`
-2. Click "Login with GitHub"
-3. Authorize the application
-4. Enter invite code (default: `FOUNDRY-START` or `FOUNDRY-VIP`)
-5. Account activated!
-
-### Invite Codes
-- **Master Code**: `FOUNDRY-VIP` (always valid)
-- **Monthly Codes**: Auto-generated (e.g., `FOUNDRY-JAN`, `FOUNDRY-FEB`)
-
-## 🏗️ Architecture
-
-### Authentication Flow
-```
-User → GitHub OAuth → Backend (/auth/github/callback)
-     → Store User + Access Token → Redirect to Frontend
-     → Frontend stores token in localStorage
-     → User enters Invite Code → Account Activated
-```
-
-### Project Interactions
-```
-User clicks Like/Favorite/View
-  → Frontend (Optimistic Update)
-  → Backend API (POST /api/projects/:id/{like|favorite|view})
-  → Database (Insert/Delete in interaction tables)
-  → Update aggregate counts (like_count, view_count)
-```
-
-## 📊 Database Schema
-
-### Core Tables
-- `users`: User accounts with GitHub info
-- `projects`: Deployed projects
-- `invite_codes`: Monthly rotating invite codes
-
-### Interaction Tables
-- `project_likes`: User-Project like relationships
-- `project_views`: Unique view tracking
-- `project_favorites`: User bookmarks
-
-## 🚧 Roadmap
-
-- [ ] Kaniko integration for actual builds
-- [ ] Real-time build logs via WebSocket
-- [ ] Kubernetes namespace isolation per user
-- [ ] Custom domain support
-- [ ] Environment variable management
-- [ ] Deployment rollback
 
 ## 📝 License
 
@@ -186,7 +74,7 @@ MIT License
 
 ## 👨‍💻 Author
 
-Built with ❤️ by **park-dev** as part of Project Foundry - a private PaaS experiment.
+Built with ❤️ by **heejunp** as part of Project Foundry - a private PaaS experiment.
 
 ---
 
