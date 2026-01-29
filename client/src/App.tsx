@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LoginPage } from "@/pages/Login"
 import { DashboardPage } from "@/pages/Dashboard"
 import { MyPage } from "@/pages/MyPage"
+import { NewProjectPage } from "@/pages/NewProject"
 import { AuthCallbackPage } from "@/pages/AuthCallback"
 import { Blocks, Rocket, LogOut, Plus } from "lucide-react"
 
@@ -103,9 +104,11 @@ function RootLayout() {
 
             <div className="flex items-center gap-2 ml-4">
                {isAuthenticated && (
-                 <Button size="sm" variant="default" className="hidden md:flex">
-                    <Plus className="mr-2 h-4 w-4" /> New Project
-                 </Button>
+                  <Link to="/new">
+                     <Button size="sm" variant="default" className="hidden md:flex">
+                        <Plus className="mr-2 h-4 w-4" /> New Project
+                     </Button>
+                  </Link>
                )}
                
                <ThemeToggle />
@@ -160,6 +163,7 @@ function App() {
              <Route index element={<Navigate to="/dashboard" replace />} />
              <Route path="dashboard" element={<DashboardPage />} />
              <Route path="mypage" element={<MyPage />} />
+             <Route path="new" element={<NewProjectPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

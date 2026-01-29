@@ -2,6 +2,7 @@ package handler
 
 import (
 	"foundry-server/internal/database"
+	"foundry-server/internal/k8s"
 	"foundry-server/internal/model"
 	"net/http"
 
@@ -97,6 +98,19 @@ func CreateProject(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
 	}
 
+	// 1. Fetch User to get AccessToken
+	var user model.User
+	if result := database.DB.Select("access_token").Where("id = ?", userID).First(&user); result.Error != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "User not found"})
+	}
+
+	// Default branch to main if empty
+	branch := req.Branch
+	if branch == "" {
+		branch = "main"
+	}
+
+	// 2. Create Project Record (Transaction)
 	project := model.Project{
 		Name:    req.Name,
 		RepoURL: req.RepoURL,
@@ -104,8 +118,48 @@ func CreateProject(c echo.Context) error {
 		Status:  "building",
 	}
 
-	if result := database.DB.Create(&project); result.Error != nil {
+	tx := database.DB.Begin()
+	if err := tx.Create(&project).Error; err != nil {
+		tx.Rollback()
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create project"})
+	}
+
+	// 3. Save Env Vars
+	envMap := make(map[string]string)
+	for _, env := range req.EnvVars {
+		if env.Key == "" {
+			continue
+		}
+		envRecord := model.ProjectEnv{
+			ProjectID: project.ID,
+			Key:       env.Key,
+			Value:     env.Value,
+		}
+		if err := tx.Create(&envRecord).Error; err != nil {
+			tx.Rollback()
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save env vars"})
+		}
+		envMap[env.Key] = env.Value
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Transaction commit failed"})
+	}
+
+	// 4. Trigger K8s Build
+	// Note: Verify k8s client is initialized before calling
+	if k8s.Client != nil {
+		if err := k8s.TriggerBuild(project.ID, req.RepoURL, branch, user.AccessToken, envMap); err != nil {
+			// Log error but assume project is created. User can retry build later.
+			// Or update status to error.
+			database.DB.Model(&project).Update("status", "error")
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to trigger build: " + err.Error()})
+		}
+	} else {
+		// If K8s is not connected (e.g. dev mode without k8s), we just log it
+		// In production, this might be an error or handled gracefully
+		database.DB.Model(&project).Update("status", "error")
+		// return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "Kubernetes not connected"})
 	}
 
 	return c.JSON(http.StatusCreated, project)

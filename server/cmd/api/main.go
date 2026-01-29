@@ -5,6 +5,8 @@ import (
 	"foundry-server/internal/handler"
 	"log"
 
+	k8s "command-line-arguments/Users/phj/park/project/foundry/server/internal/k8s/client.go"
+
 	"github.com/joho/godotenv"
 
 	"github.com/labstack/echo/v4"
@@ -17,8 +19,14 @@ func main() {
 		log.Println("No .env file found")
 	}
 
-	// Initialize Database
-	database.Connect()
+	// Init Database
+	database.InitDB() // Changed from Connect() to InitDB()
+
+    // Init Kubernetes Client
+    if err := k8s.InitK8s(); err != nil {
+        log.Printf("Failed to init K8s: %v", err)
+        // We don't fatal here, allowing server to run without K8s for now
+    }
 
 	e := echo.New()
 

@@ -44,11 +44,27 @@ type InviteCode struct {
 	CreatedAt  time.Time
 }
 
+// ProjectEnv represents environment variables
+type ProjectEnv struct {
+    ID        uint      `gorm:"primaryKey" json:"id"`
+    ProjectID string    `gorm:"not null" json:"projectId"`
+    Key       string    `gorm:"not null" json:"key"`
+    Value     string    `gorm:"not null" json:"value"`
+    CreatedAt time.Time `json:"createdAt"`
+}
+
 // DTOs
 
 type CreateProjectRequest struct {
-	Name    string `json:"name"`
-	RepoURL string `json:"repoUrl"`
+	Name    string            `json:"name"`
+	RepoURL string            `json:"repoUrl"`
+    Branch  string            `json:"branch"`
+    EnvVars []EnvVarRequest   `json:"envVars"`
+}
+
+type EnvVarRequest struct {
+    Key   string `json:"key"`
+    Value string `json:"value"`
 }
 
 type ActivateRequest struct {
@@ -57,5 +73,5 @@ type ActivateRequest struct {
 
 type LoginResponse struct {
 	User  User   `json:"user"`
-	Token string `json:"token"` // Simple mock token for now
+	Token string `json:"token"`
 }
