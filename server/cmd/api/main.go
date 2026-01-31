@@ -5,7 +5,7 @@ import (
 	"foundry-server/internal/handler"
 	"log"
 
-	k8s "command-line-arguments/Users/phj/park/project/foundry/server/internal/k8s/client.go"
+	"foundry-server/internal/k8s"
 
 	"github.com/joho/godotenv"
 
