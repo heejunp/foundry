@@ -80,10 +80,45 @@ export function NewProjectPage() {
       // Create Project logic here
       console.log("Creating project:", { repoUrl, projectName, branch, envVars })
       
-      // Simulate API call
-      setTimeout(() => {
-          navigate("/mypage")
-      }, 1000)
+      const token = localStorage.getItem("foundry_token")
+      if (!token) {
+          navigate("/login")
+          return
+      }
+
+      setIsValidating(true) // Reuse state for loading
+      
+      try {
+        const res = await fetch(`/api/projects`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-User-ID": token
+            },
+            body: JSON.stringify({
+                name: projectName,
+                repoUrl: repoUrl,
+                branch: branch,
+                envVars: envVars
+            })
+        })
+
+        if (!res.ok) {
+            const data = await res.json()
+            throw new Error(data.error || "Failed to create project")
+        }
+
+        const project = await res.json()
+        console.log("Project Created:", project)
+        
+        navigate("/mypage")
+
+      } catch (e: any) {
+          console.error("Failed to create project:", e)
+          alert(e.message || "Something went wrong")
+      } finally {
+          setIsValidating(false)
+      }
   }
 
   return (

@@ -22,8 +22,8 @@ export function LoginPage() {
   const token = localStorage.getItem("foundry_token")
 
   const handleGithubLogin = () => {
-    // Redirect to backend auth
-    window.location.href = "http://localhost:8080/auth/login"
+    // Redirect to backend auth (Relative path)
+    window.location.href = `/auth/login`
   }
 
   const handleActivate = async (e: React.FormEvent) => {
@@ -34,7 +34,7 @@ export function LoginPage() {
     setError("")
 
     try {
-        const res = await fetch("http://localhost:8080/api/activate", {
+        const res = await fetch(`/api/activate`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",

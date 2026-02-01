@@ -34,13 +34,14 @@ function RootLayout() {
         const fetchUser = async () => {
              const token = localStorage.getItem("foundry_token")
              try {
-                 const res = await fetch("http://localhost:8080/api/me", {
-                    headers: { "X-User-ID": token || "" }
-                 })
-                 if (res.ok) {
-                     const data = await res.json()
-                     setUser(data)
-                 }
+                // Use relative path for maximum portability
+                const res = await fetch(`/api/me`, {
+                   headers: { "X-User-ID": token || "" }
+                })
+                if (res.ok) {
+                    const data = await res.json()
+                    setUser(data)
+                }
              } catch (e) {
                  console.error("Failed to fetch user")
              }
@@ -60,7 +61,7 @@ function RootLayout() {
 
     try {
         const token = localStorage.getItem("foundry_token")
-        const res = await fetch("http://localhost:8080/api/me", {
+        const res = await fetch(`/api/me`, {
             method: "DELETE",
             headers: {
                 "X-User-ID": token || ""

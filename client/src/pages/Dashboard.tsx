@@ -40,7 +40,7 @@ export function DashboardPage() {
         const headers: Record<string, string> = {}
         if (token) headers["X-User-ID"] = token
 
-        const res = await fetch(`http://localhost:8080/api/projects/public?sort=${sort}`, { headers })
+        const res = await fetch(`/api/projects/public?sort=${sort}`, { headers })
         if (res.ok) {
             const data = await res.json()
             setProjects(data)
@@ -67,7 +67,7 @@ export function DashboardPage() {
     }))
 
     try {
-        await fetch(`http://localhost:8080/api/projects/${id}/${type}`, {
+        await fetch(`/api/projects/${id}/${type}`, {
             method: "POST",
             headers: { "X-User-ID": token || "" }
         })
