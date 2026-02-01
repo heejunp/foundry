@@ -23,7 +23,7 @@ export function LoginPage() {
 
   const handleGithubLogin = () => {
     // Redirect to backend auth (Relative path)
-    window.location.href = `/auth/login`
+    window.location.href = `/api/auth/github/login`
   }
 
   const handleActivate = async (e: React.FormEvent) => {

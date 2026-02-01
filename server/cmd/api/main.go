@@ -36,11 +36,11 @@ func main() {
 	e.Use(middleware.CORS())
 
 	// Public Routes
-	// Public Routes
 	handler.InitOAuth()
-	e.GET("/auth/login", handler.GithubLogin)             // Old entry point
-	e.GET("/auth/github/login", handler.GithubLogin)      // Explicit entry point
-	e.GET("/auth/github/callback", handler.GithubCallback)
+	// Auth routes moved to /api/auth/...
+	e.GET("/api/auth/login", handler.GithubLogin)             // Entry point
+	e.GET("/api/auth/github/login", handler.GithubLogin)      // Alias
+	e.GET("/api/auth/github/callback", handler.GithubCallback)
 	e.GET("/api/projects/public", handler.GetPublicProjects)
 
 	// Protected Routes

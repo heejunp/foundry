@@ -28,10 +28,16 @@ func InitOAuth() {
 		fmt.Println("Warning: GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET not set.")
 	}
 
+	// Redirect URL from Env (Important for Prod/Dev separation)
+	redirectURL := os.Getenv("GITHUB_REDIRECT_URL")
+	if redirectURL == "" {
+		redirectURL = "http://localhost:8080/api/auth/github/callback" // Fallback
+	}
+
 	oauthConfig = &oauth2.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-		RedirectURL:  "http://localhost:8080/auth/github/callback",
+		RedirectURL:  redirectURL,
 		Scopes:       []string{"read:user"},
 		Endpoint:     github.Endpoint,
 	}
@@ -119,9 +125,14 @@ func GithubCallback(c echo.Context) error {
 		database.DB.Save(&user)
 	}
 
-	// Redirect to Frontend with UserID (acting as token)
-	// In production, sign this ID into a JWT
-	frontendURL := "http://localhost:5173/auth/callback"
+	// Redirect to Frontend
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "/auth/callback" // Default to relative path for same-origin (Prod)
+	} else {
+		frontendURL = fmt.Sprintf("%s/auth/callback", frontendURL)
+	}
+
 	return c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("%s?token=%s", frontendURL, user.ID))
 }
 
