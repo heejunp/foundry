@@ -8,6 +8,7 @@ import { LoginPage } from "@/pages/Login"
 import { DashboardPage } from "@/pages/Dashboard"
 import { MyPage } from "@/pages/MyPage"
 import { NewProjectPage } from "@/pages/NewProject"
+import { ProjectDetailPage } from "@/pages/ProjectDetail"
 import { AuthCallbackPage } from "@/pages/AuthCallback"
 import { Blocks, Rocket, LogOut, Plus } from "lucide-react"
 
@@ -166,6 +167,7 @@ function App() {
              <Route path="dashboard" element={<DashboardPage />} />
              <Route path="mypage" element={<MyPage />} />
              <Route path="new" element={<NewProjectPage />} />
+             <Route path="/projects/:id" element={<ProjectDetailPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

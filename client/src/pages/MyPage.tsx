@@ -148,7 +148,11 @@ export function MyPage() {
           ) : (
             <>
                 {projects.map((project) => (
-                    <Card key={project.id} className="group hover:shadow-md transition-all dark:hover:border-zinc-700">
+                    <Card 
+                key={project.id} 
+                className="overflow-hidden hover:shadow-lg transition-all duration-300 border-border/50 cursor-pointer"
+                onClick={() => navigate(`/projects/${project.id}`)}
+            >
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-base font-medium">
                         {project.name}
@@ -163,9 +167,7 @@ export function MyPage() {
                             </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuItem>View Logs</DropdownMenuItem>
-                            <DropdownMenuItem>Redeploy</DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem className="text-red-600 focus:text-red-500" onClick={() => handleDeleteProject(project.id)}>
                                 Delete Project

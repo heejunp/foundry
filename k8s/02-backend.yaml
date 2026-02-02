@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: foundry-backend-sa
+  namespace: apps
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: foundry-backend-role
+  namespace: apps
+rules:
+  # 1. Kaniko Job을 만들고 지울 수 있는 권한
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "delete", "deletecollection"]
+  # 2. 빌드 로그를 보거나 파드 상태를 체크할 권한
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # 3. 배포(Deployment)와 서비스(Service)를 만들 권한 (Deploy 기능용)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # 4. 인그레스 설정 권한 (도메인 연결용)
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: foundry-backend-binding
+  namespace: apps
+subjects:
+  - kind: ServiceAccount
+    name: foundry-backend-sa
+    namespace: apps
+roleRef:
+  kind: Role
+  name: foundry-backend-role
+  apiGroup: rbac.authorization.k8s.io
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: foundry-backend
+  namespace: apps
+  labels:
+    app: foundry-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: foundry-backend
+  template:
+    metadata:
+      labels:
+        app: foundry-backend
+    spec:
+      serviceAccountName: foundry-backend-sa
+      nodeSelector:
+        role: apps
+      containers:
+      - name: backend
+        image: parkheejun/foundry-backend:v0.9.3
+        ports:
+        - containerPort: 8080
+        env:
+        # --- DB 설정 ---
+        - name: DB_HOST
+          value: "foundry-db-svc"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: DB_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: DB_NAME
+        - name: DB_SSLMODE
+          value: "disable"
+        # --- GitHub OAuth 설정 ---
+        - name: GITHUB_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: GITHUB_CLIENT_ID
+        - name: GITHUB_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: GITHUB_CLIENT_SECRET
+        - name: GITHUB_REDIRECT_URL
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: GITHUB_REDIRECT_URL
+        # --- Docker Hub 설정 ---
+        - name: CONTAINER_REGISTRY
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: CONTAINER_REGISTRY
+        # --- Front 설정 ---
+        - name: FRONTEND_URL
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: FRONTEND_URL
+        # --- 기타 설정 ---
+        - name: PORT
+          value: "8080"
+        - name: ALLOWED_ORIGINS
+          value: "https://foundry.heejunp.com"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: foundry-backend-svc
+  namespace: apps
+spec:
+  selector:
+    app: foundry-backend
+  ports:
+    - port: 80
+      targetPort: 8080

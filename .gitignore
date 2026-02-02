@@ -53,3 +53,4 @@ temp/
 *.pem
 *.key
 *.crt
+00-secret.yaml

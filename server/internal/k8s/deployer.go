@@ -146,25 +146,73 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
 	}
 
 	// Apply Everything (Create or Update)
-	// Error handling simplified for brevity
+	// Deployment
 	_, err := Client.AppsV1().Deployments(namespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
-		// Try update if exists? For now just create
-		fmt.Printf("[K8s] Deployment create error (might exist): %v\n", err)
+		// If exists, try Update
+		if _, updateErr := Client.AppsV1().Deployments(namespace).Update(context.TODO(), deployment, metav1.UpdateOptions{}); updateErr != nil {
+			fmt.Printf("[K8s] Deployment create/update error: %v\n", err)
+		}
 	}
 	
-	_, err = Client.CoreV1().Services(namespace).Create(context.TODO(), service, metav1.CreateOptions{})
-	if err != nil {
-		fmt.Printf("[K8s] Service create error: %v\n", err)
+	// Service
+	// Services are immutable in some fields, usually we just ensure it exists or delete/recreate if needed.
+	// For MVP, if port changed, maybe simpler to delete and recreate or patch.
+	// Let's try explicit update for Service (might fail if ClusterIP is not preserved, so we should copy it)
+	
+	existingSvc, err := Client.CoreV1().Services(namespace).Get(context.TODO(), service.Name, metav1.GetOptions{})
+	if err == nil {
+		service.ResourceVersion = existingSvc.ResourceVersion
+		service.Spec.ClusterIP = existingSvc.Spec.ClusterIP // Preserve ClusterIP
+		_, err = Client.CoreV1().Services(namespace).Update(context.TODO(), service, metav1.UpdateOptions{})
+	} else {
+		_, err = Client.CoreV1().Services(namespace).Create(context.TODO(), service, metav1.CreateOptions{})
 	}
+    if err != nil {
+         fmt.Printf("[K8s] Service apply error: %v\n", err)
+    }
 
+	// Ingress
 	_, err = Client.NetworkingV1().Ingresses(namespace).Create(context.TODO(), ingress, metav1.CreateOptions{})
 	if err != nil {
-		fmt.Printf("[K8s] Ingress create error: %v\n", err)
+		// If exists, update
+		if existingIngress, getErr := Client.NetworkingV1().Ingresses(namespace).Get(context.TODO(), ingress.Name, metav1.GetOptions{}); getErr == nil {
+			ingress.ResourceVersion = existingIngress.ResourceVersion
+			_, err = Client.NetworkingV1().Ingresses(namespace).Update(context.TODO(), ingress, metav1.UpdateOptions{})
+		}
+	}
+	if err != nil {
+		fmt.Printf("[K8s] Ingress apply error: %v\n", err)
 	}
 
 	fmt.Printf("[K8s] Deployed project %s at http://%s\n", name, ingressHost)
 	return fmt.Sprintf("http://%s", ingressHost), nil
+}
+
+// ScaleProject scales the deployment to the specified replicas
+func ScaleProject(projectID string, replicas int32) error {
+	if Client == nil {
+		return fmt.Errorf("kubernetes client not initialized")
+	}
+	namespace := "apps"
+
+	scale, err := Client.AppsV1().Deployments(namespace).GetScale(context.TODO(), projectID, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get scale for %s: %v", projectID, err)
+	}
+
+	scale.Spec.Replicas = replicas
+	_, err = Client.AppsV1().Deployments(namespace).UpdateScale(context.TODO(), projectID, scale, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update scale for %s: %v", projectID, err)
+	}
+	
+	action := "started"
+	if replicas == 0 {
+		action = "stopped"
+	}
+	fmt.Printf("[K8s] Project %s %s (replicas: %d)\n", projectID, action, replicas)
+	return nil
 }
 
 // DeleteProject deletes Deployment, Service, and Ingress

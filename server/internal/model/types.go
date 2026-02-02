@@ -61,7 +61,13 @@ type CreateProjectRequest struct {
 	RepoURL string            `json:"repoUrl"`
 	Port    int               `json:"port"`
     Branch  string            `json:"branch"`
-    EnvVars []EnvVarRequest   `json:"envVars"`
+    	EnvVars []EnvVarRequest   `json:"envVars"`
+}
+
+type UpdateProjectRequest struct {
+	Action  string            `json:"action"` // "start", "stop"
+	Port    int               `json:"port"`
+	EnvVars []EnvVarRequest   `json:"envVars"`
 }
 
 type EnvVarRequest struct {

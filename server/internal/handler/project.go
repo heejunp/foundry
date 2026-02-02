@@ -198,3 +198,133 @@ func DeleteProject(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Project deleted successfully"})
 }
+
+// GetProject returns a single project details including env vars
+func GetProject(c echo.Context) error {
+	userID := c.Get("userID").(string)
+	projectID := c.Param("id")
+
+	var project model.Project
+	if err := database.DB.Where("id = ? AND owner_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Project not found or access denied"})
+	}
+
+	// Fetch Env Vars
+	var envs []model.ProjectEnv
+	if err := database.DB.Where("project_id = ?", projectID).Find(&envs).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch env vars"})
+	}
+
+	// Combine response
+	response := map[string]interface{}{
+		"project": project,
+		"envVars": envs,
+	}
+
+	return c.JSON(http.StatusOK, response)
+}
+
+// UpdateProject handles updating settings (port, envs) or actions (start/stop)
+func UpdateProject(c echo.Context) error {
+	userID := c.Get("userID").(string)
+	projectID := c.Param("id")
+
+	var req model.UpdateProjectRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
+	}
+
+	var project model.Project
+	if err := database.DB.Where("id = ? AND owner_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Project not found"})
+	}
+
+	// 1. Handle Actions (Start/Stop)
+	if req.Action != "" {
+		if k8s.Client != nil {
+			var replicas int32
+			status := "running"
+			if req.Action == "stop" {
+				replicas = 0
+				status = "stopped"
+			} else if req.Action == "start" {
+				replicas = 1
+			} else {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid action"})
+			}
+
+			if err := k8s.ScaleProject(projectID, replicas); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to scale project"})
+			}
+			
+			// Update Status in DB
+			database.DB.Model(&project).Update("status", status)
+			return c.JSON(http.StatusOK, map[string]string{"message": "Project " + status})
+		}
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "Kubernetes not connected"})
+	}
+
+	// 2. Handle Configuration Update (Port / EnvVars) -> Requires Redeploy
+	// We need to fetch existing env vars if not provided?
+	// The user usually sends the FULL set of env vars if they edit them.
+	// Assume: if req.EnvVars is provided, we replace all envs? Or merge?
+	// Ideally: Replace all for simplicity.
+	
+	shouldRedeploy := false
+
+	tx := database.DB.Begin()
+
+	// Update Port
+	if req.Port != 0 && req.Port != project.Port {
+		project.Port = req.Port
+		if err := tx.Save(&project).Error; err != nil {
+			tx.Rollback()
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update project"})
+		}
+		shouldRedeploy = true
+	}
+
+	// Update Env Vars
+	if req.EnvVars != nil {
+		// Delete old
+		if err := tx.Where("project_id = ?", projectID).Delete(&model.ProjectEnv{}).Error; err != nil {
+			tx.Rollback()
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clean old env vars"})
+		}
+		// Insert new
+		for _, env := range req.EnvVars {
+			if env.Key == "" { continue }
+			newEnv := model.ProjectEnv{
+				ProjectID: project.ID,
+				Key:       env.Key,
+				Value:     env.Value,
+			}
+			if err := tx.Create(&newEnv).Error; err != nil {
+				tx.Rollback()
+				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save env vars"})
+			}
+		}
+		shouldRedeploy = true
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Commit failed"})
+	}
+
+	if shouldRedeploy && k8s.Client != nil {
+		// Fetch current env vars map for deployment
+		var currentEnvs []model.ProjectEnv
+		database.DB.Where("project_id = ?", projectID).Find(&currentEnvs)
+		envMap := make(map[string]string)
+		for _, e := range currentEnvs {
+			envMap[e.Key] = e.Value
+		}
+
+		// Redeploy
+		if _, err := k8s.DeployProject(projectID, project.Name, envMap, project.Port); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to redeploy: " + err.Error()})
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Project updated successfully"})
+}
