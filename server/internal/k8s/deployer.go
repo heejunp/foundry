@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -17,7 +18,7 @@ import (
 // For MVP, we might call this immediately assuming the image will exist,
 // OR we should have a controller/poller checking build status.
 // For now, let's just scaffolding it.
-func DeployProject(projectID, name string, envVars map[string]string) (string, error) {
+func DeployProject(projectID, name string, envVars map[string]string, targetPort int) (string, error) {
 	if Client == nil {
 		return "", fmt.Errorf("kubernetes client not initialized")
 	}
@@ -63,9 +64,19 @@ func DeployProject(projectID, name string, envVars map[string]string) (string, e
 						{
 							Name:  "app",
 							Image: imageName,
-							Ports: []corev1.ContainerPort{{ContainerPort: 80}}, // Assume port 80 for now
+							Ports: []corev1.ContainerPort{{ContainerPort: int32(targetPort)}}, // User defined port
 							Env:   k8sEnv,
 							ImagePullPolicy: corev1.PullAlways, // Important for updates
+							Resources: corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("1"),
+									corev1.ResourceMemory: resource.MustParse("1Gi"),
+								},
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse("1"),
+									corev1.ResourceMemory: resource.MustParse("1Gi"),
+								},
+							},
 						},
 					},
 				},
@@ -84,7 +95,7 @@ func DeployProject(projectID, name string, envVars map[string]string) (string, e
 				{
 					Protocol:   corev1.ProtocolTCP,
 					Port:       80,
-					TargetPort: intstr.FromInt(80),
+					TargetPort: intstr.FromInt(targetPort),
 				},
 			},
 			Type: corev1.ServiceTypeClusterIP,

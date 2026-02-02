@@ -26,6 +26,7 @@ export function NewProjectPage() {
   const [repoUrl, setRepoUrl] = useState("")
   const [projectName, setProjectName] = useState("")
   const [branch, setBranch] = useState("main") // Default branch
+  const [port, setPort] = useState("80")
   const [isValidating, setIsValidating] = useState(false)
   const [isValidRepo, setIsValidRepo] = useState<boolean | null>(null)
   
@@ -99,6 +100,7 @@ export function NewProjectPage() {
                 name: projectName,
                 repoUrl: repoUrl,
                 branch: branch,
+                port: parseInt(port) || 80,
                 envVars: envVars
             })
         })
@@ -170,9 +172,9 @@ export function NewProjectPage() {
               )}
             </div>
 
-            {/* 2. Project Name & Branch */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
+            {/* 2. Project Name, Branch, Port */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                <div className="md:col-span-5 space-y-2">
                     <Label htmlFor="project-name">Project Name</Label>
                     <Input 
                         id="project-name" 
@@ -182,7 +184,7 @@ export function NewProjectPage() {
                     />
                 </div>
                 
-                <div className="space-y-2">
+                <div className="md:col-span-4 space-y-2">
                     <Label htmlFor="branch">Branch</Label>
                     <Select value={branch} onValueChange={setBranch}>
                         <SelectTrigger id="branch">
@@ -194,6 +196,17 @@ export function NewProjectPage() {
                             <SelectItem value="develop">develop</SelectItem>
                         </SelectContent>
                     </Select>
+                </div>
+
+                <div className="md:col-span-3 space-y-2">
+                    <Label htmlFor="port">Port</Label>
+                    <Input 
+                        id="port" 
+                        placeholder="80" 
+                        type="number"
+                        value={port}
+                        onChange={(e) => setPort(e.target.value)}
+                    />
                 </div>
             </div>
 

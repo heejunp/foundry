@@ -20,6 +20,7 @@ type Project struct {
 	ID        string `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()" json:"id"`
 	Name      string `gorm:"not null" json:"name"`
 	RepoURL   string `gorm:"not null" json:"repoUrl"`
+	Port      int    `gorm:"default:80" json:"port"`
 	DeployURL string `json:"deployUrl"`
 	Status    string `gorm:"default:'building'" json:"status"` // building, running, error
 	OwnerID   string `gorm:"type:uuid;not null" json:"ownerId"`
@@ -58,6 +59,7 @@ type ProjectEnv struct {
 type CreateProjectRequest struct {
 	Name    string            `json:"name"`
 	RepoURL string            `json:"repoUrl"`
+	Port    int               `json:"port"`
     Branch  string            `json:"branch"`
     EnvVars []EnvVarRequest   `json:"envVars"`
 }

@@ -110,11 +110,18 @@ func CreateProject(c echo.Context) error {
 	if branch == "" {
 		branch = "main"
 	}
+	
+	port := req.Port
+	if port == 0 {
+		port = 80
+	}
 
 	// 2. Create Project Record (Transaction)
 	project := model.Project{
 		Name:    req.Name,
 		RepoURL: req.RepoURL,
+		// Branch:  branch, // Not persisted in DB model yet
+		Port:    port,
 		OwnerID: userID,
 		Status:  "building",
 	}
@@ -150,7 +157,7 @@ func CreateProject(c echo.Context) error {
 	// 4. Trigger K8s Build
 	// Note: Verify k8s client is initialized before calling
 	if k8s.Client != nil {
-		if err := k8s.TriggerBuild(project.ID, project.Name, req.RepoURL, branch, user.AccessToken, envMap); err != nil {
+		if err := k8s.TriggerBuild(project.ID, project.Name, req.RepoURL, branch, user.AccessToken, envMap, project.Port); err != nil {
 			// Log error but assume project is created. User can retry build later.
 			// Or update status to error.
 			database.DB.Model(&project).Update("status", "error")

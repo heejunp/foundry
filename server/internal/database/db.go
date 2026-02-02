@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 
+	"foundry-server/internal/model"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -30,7 +32,8 @@ func InitDB() {
 
 	log.Println("Connected to PostgreSQL")
 	
-	// AutoMigrate is useful for dev but user asked for SQL file. 
-	// We will keep this commented or use it strictly for syncing if schema.sql isn't enough.
-	// DB.AutoMigrate(&model.User{}, &model.Project{})
+	// AutoMigrate to sync schema
+	if err := DB.AutoMigrate(&model.User{}, &model.Project{}, &model.ProjectEnv{}); err != nil {
+		log.Printf("Failed to migrate database: %v", err)
+	}
 }
