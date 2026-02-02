@@ -254,8 +254,15 @@ export function NewProjectPage() {
                   <Terminal className="h-3 w-3" />
                   Ready to build
               </span>
-              <Button onClick={handleSubmit} disabled={!isValidRepo || !projectName}>
-                  Deploy Project
+              <Button onClick={handleSubmit} disabled={!isValidRepo || !projectName || isValidating}>
+                  {isValidating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Deploying...
+                      </>
+                  ) : (
+                      "Deploy Project"
+                  )}
               </Button>
           </CardFooter>
         </Card>

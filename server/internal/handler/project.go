@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"foundry-server/internal/database"
 	"foundry-server/internal/k8s"
 	"foundry-server/internal/model"
@@ -84,7 +85,7 @@ func GetPublicProjects(c echo.Context) error {
 // GetMyProjects returns projects for the authenticated user
 func GetMyProjects(c echo.Context) error {
 	userID := c.Get("userID").(string)
-	var projects []model.Project
+	projects := []model.Project{} // Initialize as empty slice to return [] instead of null
 	if result := database.DB.Where("owner_id = ?", userID).Find(&projects); result.Error != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch projects"})
 	}
@@ -149,7 +150,7 @@ func CreateProject(c echo.Context) error {
 	// 4. Trigger K8s Build
 	// Note: Verify k8s client is initialized before calling
 	if k8s.Client != nil {
-		if err := k8s.TriggerBuild(project.ID, req.RepoURL, branch, user.AccessToken, envMap); err != nil {
+		if err := k8s.TriggerBuild(project.ID, project.Name, req.RepoURL, branch, user.AccessToken, envMap); err != nil {
 			// Log error but assume project is created. User can retry build later.
 			// Or update status to error.
 			database.DB.Model(&project).Update("status", "error")
@@ -163,4 +164,30 @@ func CreateProject(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, project)
+}
+
+func DeleteProject(c echo.Context) error {
+	userID := c.Get("userID").(string)
+	projectID := c.Param("id")
+
+	var project model.Project
+	if err := database.DB.Where("id = ? AND owner_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Project not found or access denied"})
+	}
+
+	// Delete from Kubernetes
+	if k8s.Client != nil {
+		if err := k8s.DeleteProject(projectID); err != nil {
+			// Log error but proceed to delete from DB? 
+			// Or fail? Best to log and proceed (don't leave zombie DB records)
+			fmt.Printf("Failed to delete K8s resources for %s: %v\n", projectID, err)
+		}
+	}
+
+	// Delete from DB
+	if err := database.DB.Delete(&project).Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete project"})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"message": "Project deleted successfully"})
 }

@@ -65,7 +65,7 @@ export function MyPage() {
                      const data = await res.json()
                      // Map backend fields to UI fields if necessary
                      // Backend Project: { ID, Name, RepoURL, Status, CreatedAt, ... }
-                     setProjects(data.map((p: any) => ({
+                     setProjects((data || []).map((p: any) => ({
                          id: p.id,
                          name: p.name,
                          repo: p.repoUrl,
@@ -88,6 +88,26 @@ export function MyPage() {
         return () => clearInterval(interval)
 
     }, [token, navigate])
+
+    const handleDeleteProject = async (id: string) => {
+        if (!confirm("Are you sure you want to delete this project? This will stop the running service.")) return
+        
+        try {
+            const res = await fetch(`/api/projects/${id}`, {
+                method: "DELETE",
+                headers: { "X-User-ID": token || "" }
+            })
+            if (res.ok) {
+                // Remove from state
+                setProjects(prev => prev.filter(p => p.id !== id))
+            } else {
+                alert("Failed to delete project")
+            }
+        } catch (e) {
+            console.error(e)
+            alert("Error deleting project")
+        }
+    }
 
     if (!token) return null // Prevent flash
 
@@ -147,7 +167,7 @@ export function MyPage() {
                             <DropdownMenuItem>View Logs</DropdownMenuItem>
                             <DropdownMenuItem>Redeploy</DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600">
+                            <DropdownMenuItem className="text-red-600 focus:text-red-500" onClick={() => handleDeleteProject(project.id)}>
                                 Delete Project
                             </DropdownMenuItem>
                             </DropdownMenuContent>

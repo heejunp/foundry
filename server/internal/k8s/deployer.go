@@ -17,12 +17,12 @@ import (
 // For MVP, we might call this immediately assuming the image will exist,
 // OR we should have a controller/poller checking build status.
 // For now, let's just scaffolding it.
-func DeployProject(projectID, name string, envVars map[string]string) error {
+func DeployProject(projectID, name string, envVars map[string]string) (string, error) {
 	if Client == nil {
-		return fmt.Errorf("kubernetes client not initialized")
+		return "", fmt.Errorf("kubernetes client not initialized")
 	}
 
-	namespace := "default"
+	namespace := "apps" // User requested 'apps' namespace
 	registry := os.Getenv("CONTAINER_REGISTRY")
 	if registry == "" {
 		registry = "foundry-local"
@@ -53,6 +53,12 @@ func DeployProject(projectID, name string, envVars map[string]string) error {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
 				Spec: corev1.PodSpec{
+					NodeSelector: map[string]string{
+						"role": "apps",
+					},
+					ImagePullSecrets: []corev1.LocalObjectReference{
+						{Name: "regcred"},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:  "app",
@@ -86,13 +92,22 @@ func DeployProject(projectID, name string, envVars map[string]string) error {
 	}
 
 	// 4. Ingress
-	ingressHost := fmt.Sprintf("%s.foundry.local", name) // e.g. my-blog.foundry.local
+	// Hostname format: project-id.foundry.heejunp.com
+	ingressHost := fmt.Sprintf("%s-foundry.heejunp.com", projectID)
+	
 	pathType := netv1.PathTypePrefix
+	ingressClassName := "nginx"
+
 	ingress := &netv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: projectID,
+			Annotations: map[string]string{
+				// "kubernetes.io/ingress.class": "nginx",
+				"cert-manager.io/cluster-issuer": "letsencrypt-prod",
+			},
 		},
 		Spec: netv1.IngressSpec{
+			IngressClassName: &ingressClassName,
 			Rules: []netv1.IngressRule{
 				{
 					Host: ingressHost,
@@ -138,5 +153,39 @@ func DeployProject(projectID, name string, envVars map[string]string) error {
 	}
 
 	fmt.Printf("[K8s] Deployed project %s at http://%s\n", name, ingressHost)
+	return fmt.Sprintf("http://%s", ingressHost), nil
+}
+
+// DeleteProject deletes Deployment, Service, and Ingress
+func DeleteProject(projectID string) error {
+	if Client == nil {
+		return fmt.Errorf("kubernetes client not initialized")
+	}
+	namespace := "apps"
+
+	// Delete Options (PropagationBackground cleans up child pods)
+	background := metav1.DeletePropagationBackground
+	opts := metav1.DeleteOptions{PropagationPolicy: &background}
+
+	var errs []string
+
+	// Delete Ingress
+	if err := Client.NetworkingV1().Ingresses(namespace).Delete(context.TODO(), projectID, opts); err != nil {
+		errs = append(errs, fmt.Sprintf("ingress: %v", err))
+	}
+	// Delete Service
+	if err := Client.CoreV1().Services(namespace).Delete(context.TODO(), projectID, opts); err != nil {
+		errs = append(errs, fmt.Sprintf("service: %v", err))
+	}
+	// Delete Deployment
+	if err := Client.AppsV1().Deployments(namespace).Delete(context.TODO(), projectID, opts); err != nil {
+		errs = append(errs, fmt.Sprintf("deployment: %v", err))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("cleanup errors: %s", fmt.Sprint(errs))
+	}
+	
+	fmt.Printf("[K8s] Deleted project resources for %s\n", projectID)
 	return nil
 }

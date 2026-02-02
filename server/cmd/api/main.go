@@ -53,6 +53,7 @@ func main() {
 	
 	api.GET("/projects/my", handler.GetMyProjects)
 	api.POST("/projects", handler.CreateProject)
+	api.DELETE("/projects/:id", handler.DeleteProject)
 	
 	api.POST("/projects/:id/like", handler.ToggleLike)
 	api.POST("/projects/:id/favorite", handler.ToggleFavorite)

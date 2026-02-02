@@ -43,7 +43,7 @@ export function DashboardPage() {
         const res = await fetch(`/api/projects/public?sort=${sort}`, { headers })
         if (res.ok) {
             const data = await res.json()
-            setProjects(data)
+            setProjects(data || [])
         }
     } catch (e) {
         console.error("Failed to fetch projects")
