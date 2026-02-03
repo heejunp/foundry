@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { ArrowLeft, Loader2, Play, Square, Save, ExternalLink, Activity, Cpu, CircuitBoard } from "lucide-react"
 
@@ -56,22 +56,34 @@ export function ProjectDetailPage() {
         fetchProject()
     }, [id])
 
-    // Poll for stats simulating real-time update
+    // Poll for stats
     useEffect(() => {
         if (project?.status === 'running') {
-            const interval = setInterval(() => {
-                // In real implementation, this would fetch from /api/projects/:id/stats
-                // For now, we simulate "alive" stats within limits (1 core, 1GB)
-                setStats({
-                    cpu: (Math.random() * 5 + 1).toFixed(2) + "%", // 1-6% usage
-                    ram: Math.floor(Math.random() * 50 + 100) + " MB" // 100-150MB usage
-                })
-            }, 3000)
+            const fetchStats = async () => {
+                try {
+                    const res = await fetch(`/api/projects/${id}/stats`, {
+                        headers: { "X-User-ID": token || "" }
+                    })
+                    if (res.ok) {
+                        const data = await res.json()
+                        // convert chaos to human readable if needed, but k8s gives "12m", "100Mi" etc
+                        setStats({ 
+                            cpu: data.cpu === "0" ? "0" : data.cpu, 
+                            ram: data.memory === "0" ? "0" : data.memory 
+                        })
+                    }
+                } catch (e) {
+                    console.error("Stats fetch error", e)
+                }
+            }
+            
+            fetchStats()
+            const interval = setInterval(fetchStats, 3000)
             return () => clearInterval(interval)
         } else {
-            setStats({ cpu: "0.00%", ram: "0 MB" })
+            setStats({ cpu: "0", ram: "0" })
         }
-    }, [project?.status])
+    }, [project?.status, id, token])
 
     const fetchProject = async () => {
         try {

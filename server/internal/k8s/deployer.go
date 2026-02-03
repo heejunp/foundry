@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -280,4 +281,56 @@ func GetPodLogs(projectID string) (string, error) {
 	}
 
 	return string(podLogs), nil
+}
+
+// GetProjectStats returns CPU and Memory usage for the project
+func GetProjectStats(projectID string) (map[string]string, error) {
+	if Client == nil {
+		return nil, fmt.Errorf("kubernetes client not initialized")
+	}
+
+	// 1. Get Pod Name
+	pods, err := Client.CoreV1().Pods("apps").List(context.TODO(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("project-id=%s", projectID),
+	})
+	if err != nil || len(pods.Items) == 0 {
+		return map[string]string{"cpu": "0", "memory": "0"}, nil // No pods running
+	}
+	podName := pods.Items[0].Name
+
+	// 2. Call Metrics API (Raw)
+	// format: /apis/metrics.k8s.io/v1beta1/namespaces/apps/pods/<podName>
+	path := fmt.Sprintf("/apis/metrics.k8s.io/v1beta1/namespaces/apps/pods/%s", podName)
+	
+	data, err := Client.RESTClient().Get().AbsPath(path).DoRaw(context.TODO())
+	if err != nil {
+		// Metrics server might not be installed or pod not ready
+		return map[string]string{"cpu": "0", "memory": "0"}, nil
+	}
+
+
+
+	// Minimal struct for parsing
+	type PodMetrics struct {
+		Containers []struct {
+			Usage struct {
+				CPU    string `json:"cpu"`
+				Memory string `json:"memory"`
+			} `json:"usage"`
+		} `json:"containers"`
+	}
+
+	var metrics PodMetrics
+	if err := json.Unmarshal(data, &metrics); err != nil {
+		return map[string]string{"cpu": "Error", "memory": "Error"}, nil
+	}
+
+	if len(metrics.Containers) == 0 {
+		return map[string]string{"cpu": "0", "memory": "0"}, nil
+	}
+
+	return map[string]string{
+		"cpu":    metrics.Containers[0].Usage.CPU,
+		"memory": metrics.Containers[0].Usage.Memory,
+	}, nil
 }

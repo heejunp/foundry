@@ -353,3 +353,25 @@ func GetProjectLogs(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]string{"logs": logs})
 }
+
+// GetProjectStats returns resource usage
+func GetProjectStats(c echo.Context) error {
+	userID := c.Get("userID").(string)
+	projectID := c.Param("id")
+
+	// Verify ownership
+	var project model.Project
+	if err := database.DB.Where("id = ? AND owner_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Project not found"})
+	}
+
+	if k8s.Client == nil {
+		return c.JSON(http.StatusOK, map[string]string{"cpu": "0", "memory": "0"})
+	}
+
+	stats, err := k8s.GetProjectStats(projectID)
+	if err != nil {
+		return c.JSON(http.StatusOK, map[string]string{"cpu": "0", "memory": "0"})
+	}
+	return c.JSON(http.StatusOK, stats)
+}
