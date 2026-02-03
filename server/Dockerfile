@@ -30,10 +30,6 @@ RUN apk add --no-cache ca-certificates
 # Copy binary from builder
 COPY --from=builder /app/main .
 
-# Copy schemas (if needed at runtime, though usually applied manually)
-COPY schema.sql .
-COPY seed.sql .
-
 # Expose port
 EXPOSE 8080
 
