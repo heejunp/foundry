@@ -1,0 +1,86 @@
+name: Build and Update K8s Manifests
+
+on:
+  push:
+    branches: [ "main" ]
+    # [중요] k8s 폴더가 변경될 때는 이 액션이 돌지 않도록 막아야 '무한 루프'를 방지합니다.
+    paths:
+      - 'server/**'      # 백엔드 코드가 바뀔 때만
+      - 'client/**'    # 프론트엔드 코드가 바뀔 때만
+      - '.github/workflows/**'
+
+permissions:
+  contents: write # Git에 변경 사항(버전 태그)을 푸시하기 위해 쓰기 권한 필요
+
+jobs:
+  build-and-push:
+    runs-on: foundry-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate Date-based Tag
+        run: |
+          # 1. 타임존을 한국(Asia/Seoul)으로 설정
+          export TZ="Asia/Seoul"
+          # 2. 날짜 포맷 지정 (연월일시분)
+          DATE_TAG=$(date +'%Y%m%d%H%M')
+          # 3. 환경변수(IMAGE_TAG)에 저장하여 다음 단계들이 쓸 수 있게 함
+          echo "IMAGE_TAG=v1.0-$DATE_TAG" >> $GITHUB_ENV
+          
+          # 확인용 출력
+          echo "Generated Tag: v1.0-$DATE_TAG"
+
+      # 1. Docker Hub 로그인
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 2. Docker Buildx 설정 (멀티 플랫폼 빌드용)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. [백엔드] 빌드 & 푸시
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          push: true
+          tags: |
+            parkheejun/foundry-backend:latest
+            parkheejun/foundry-backend:${{ env.IMAGE_TAG }}
+
+      # 4. [프론트엔드] 빌드 & 푸시
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client 
+          push: true
+          tags: |
+            parkheejun/foundry-frontend:latest
+            parkheejun/foundry-frontend:${{ env.IMAGE_TAG }}
+
+      # 5. [GitOps] K8s 매니페스트 이미지 태그 수정
+      - name: Update Kubernetes manifests
+        run: |
+          # Git 설정 (커밋할 사람 정보)
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+          # (1) 백엔드 YAML 파일 수정 (sed 명령어로 이미지 태그 교체)
+          # 기존 태그(무엇이든)를 현재 커밋 해시($GITHUB_SHA)로 변경
+          sed -i "s|image: parkheejun/foundry-backend:.*|image: parkheejun/foundry-backend:${{ env.IMAGE_TAG }}|g" k8s/02-backend.yaml
+
+          # (2) 프론트엔드 YAML 파일 수정
+          sed -i "s|image: parkheejun/foundry-frontend:.*|image: parkheejun/foundry-frontend:${{ env.IMAGE_TAG }}|g" k8s/03-frontend.yaml
+          
+          # 변경 사항 확인 (디버깅용)
+          echo "Changes in k8s manifests:"
+          git diff k8s/
+
+          # (3) Git Commit & Push
+          git add k8s/02-backend.yaml k8s/03-frontend.yaml
+          git commit -m "Update k8s image tags to ${{ env.IMAGE_TAG }} [skip ci]"
+          git push
