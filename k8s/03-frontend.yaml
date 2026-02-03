@@ -47,7 +47,7 @@ spec:
         role: apps
       containers:
       - name: frontend
-        image: parkheejun/foundry-frontend:v0.8
+        image: parkheejun/foundry-frontend:v1.0-202602030950
         ports:
         - containerPort: 80
         volumeMounts:
