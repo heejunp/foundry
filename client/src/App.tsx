@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Outlet, Navigate, Link, useNavigate } from "react-router-dom"
 import { useState, useEffect } from "react"
-import { ThemeProvider } from "@/lib/theme-provider"
-import { ThemeToggle } from "@/components/ui/theme-toggle"
+// import { ThemeProvider } from "@/lib/theme-provider"
+// import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { LoginPage } from "@/pages/Login"
@@ -113,7 +113,7 @@ function RootLayout() {
                   </Link>
                )}
                
-               <ThemeToggle />
+               {/* <ThemeToggle /> */}
                
                {isAuthenticated ? (
                   <DropdownMenu>
@@ -155,7 +155,7 @@ function RootLayout() {
 
 function App() {
   return (
-    <ThemeProvider defaultTheme="system" storageKey="foundry-ui-theme">
+    // <ThemeProvider defaultTheme="system" storageKey="foundry-ui-theme">
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -171,7 +171,7 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
-    </ThemeProvider>
+    // </ThemeProvider>
   )
 }
 

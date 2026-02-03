@@ -1,32 +1,31 @@
 import {
-    Activity,
-    GitBranch,
-    MoreHorizontal,
-    Plus,
-    Server,
-    Terminal,
-  } from "lucide-react"
-  
-  import { Button } from "@/components/ui/button"
-  import {
-    Card,
-    CardContent,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-  } from "@/components/ui/card"
-  import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-  } from "@/components/ui/dropdown-menu"
-  import { cn } from "@/lib/utils"
-
+  Activity,
+  GitBranch,
+  MoreHorizontal,
+  Plus,
+  Server,
+  Terminal,
+} from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
+
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
+import { LogsModal } from "@/components/LogsModal"
 
 interface Project {
     id: string
@@ -42,6 +41,7 @@ const statusColors: Record<string, string> = {
     running: "bg-emerald-500",
     building: "bg-amber-500 animate-pulse",
     error: "bg-red-500",
+    stopped: "bg-zinc-500",
 }
 
 export function MyPage() {
@@ -49,6 +49,7 @@ export function MyPage() {
     const token = localStorage.getItem("foundry_token")
     const [projects, setProjects] = useState<Project[]>([])
     const [loading, setLoading] = useState(true)
+    const [logsProjectId, setLogsProjectId] = useState<string | null>(null)
 
     useEffect(() => {
         if (!token) {
@@ -63,15 +64,13 @@ export function MyPage() {
                  })
                  if (res.ok) {
                      const data = await res.json()
-                     // Map backend fields to UI fields if necessary
-                     // Backend Project: { ID, Name, RepoURL, Status, CreatedAt, ... }
                      setProjects((data || []).map((p: any) => ({
                          id: p.id,
                          name: p.name,
                          repo: p.repoUrl,
                          status: p.status || "building",
                          url: p.deployUrl || "", 
-                         lastCommit: "Initial commit", // Backend might not send this yet
+                         lastCommit: "Initial commit",
                          time: new Date(p.createdAt).toLocaleDateString()
                      })))
                  }
@@ -83,7 +82,6 @@ export function MyPage() {
         }
         
         fetchProjects()
-        // Poll for updates every 5 seconds if there are building projects
         const interval = setInterval(fetchProjects, 5000)
         return () => clearInterval(interval)
 
@@ -98,7 +96,6 @@ export function MyPage() {
                 headers: { "X-User-ID": token || "" }
             })
             if (res.ok) {
-                // Remove from state
                 setProjects(prev => prev.filter(p => p.id !== id))
             } else {
                 alert("Failed to delete project")
@@ -109,10 +106,16 @@ export function MyPage() {
         }
     }
 
-    if (!token) return null // Prevent flash
+    if (!token) return null
 
     return (
       <div className="space-y-8 p-8 max-w-7xl mx-auto animate-in fade-in duration-500">
+        <LogsModal 
+            projectId={logsProjectId} 
+            isOpen={!!logsProjectId} 
+            onClose={() => setLogsProjectId(null)} 
+        />
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="space-y-1">
@@ -122,22 +125,13 @@ export function MyPage() {
             </p>
           </div>
           <div className="flex items-center space-x-4">
-               {/* Resource Gauge Mockup */}
-               <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground bg-secondary/50 px-3 py-1 rounded-full border border-border/50">
-                  <Activity className="w-4 h-4" />
-                  <span>CPU: 12%</span>
-                  <span className="text-border">|</span>
-                  <span>RAM: 24%</span>
-              </div>
+             {/* Stats can go here */}
           </div>
         </div>
   
         {/* Project Grid */}
-  
-        {/* Project Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {loading ? (
-             // Loading Skeletons
              Array.from({ length: 3 }).map((_, i) => (
                 <Card key={i} className="animate-pulse">
                     <CardHeader><div className="h-6 w-2/3 bg-muted rounded"></div></CardHeader>
@@ -149,31 +143,39 @@ export function MyPage() {
             <>
                 {projects.map((project) => (
                     <Card 
-                key={project.id} 
-                className="overflow-hidden hover:shadow-lg transition-all duration-300 border-border/50 cursor-pointer"
-                onClick={() => navigate(`/projects/${project.id}`)}
-            >
+                        key={project.id} 
+                        className="overflow-hidden hover:shadow-lg transition-all duration-300 border-border/50 cursor-pointer group"
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                    >
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-base font-medium">
                         {project.name}
                         </CardTitle>
                         <div className="flex items-center gap-2">
-                        <div className={cn("w-2.5 h-2.5 rounded-full", statusColors[project.status])} />
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span className="sr-only">Open menu</span>
-                                <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                            <DropdownMenuItem>View Logs</DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-red-600 focus:text-red-500" onClick={() => handleDeleteProject(project.id)}>
-                                Delete Project
-                            </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                            <div className={cn("w-2.5 h-2.5 rounded-full", statusColors[project.status] || "bg-gray-500")} />
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                    <span className="sr-only">Open menu</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation()
+                                    setLogsProjectId(project.id)
+                                }}>
+                                    View Logs
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-red-600 focus:text-red-500" onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDeleteProject(project.id)
+                                }}>
+                                    Delete Project
+                                </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                     </CardHeader>
                     <CardContent>
@@ -189,21 +191,22 @@ export function MyPage() {
                         </div>
                         <span>{project.time}</span>
                         </div>
-        
                     </CardContent>
                     <CardFooter>
-                        <Button variant="outline" size="sm" className="w-full text-xs h-8" asChild>
-                            <a href={project.url} target="_blank" rel="noreferrer">
-                                Visit Deployment <Server className="ml-2 h-3 w-3"/>
-                            </a>
-                        </Button>
+                        {project.url && (
+                            <Button variant="outline" size="sm" className="w-full text-xs h-8" asChild onClick={(e) => e.stopPropagation()}>
+                                <a href={project.url} target="_blank" rel="noreferrer">
+                                    Visit Deployment <Server className="ml-2 h-3 w-3"/>
+                                </a>
+                            </Button>
+                        )}
                     </CardFooter>
                     </Card>
                 ))}
             </>
           )}
   
-          {/* New Project Card - Always show unless loading maybe? No, show always to be actionable */}
+          {/* New Project Card */}
           {!loading && (
             <Button variant="outline" className="h-full min-h-[180px] flex flex-col gap-4 border-dashed border-2 hover:border-primary/50 hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-all" onClick={() => navigate("/new")}>
                 <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center">
@@ -215,4 +218,4 @@ export function MyPage() {
         </div>
       </div>
     )
-  }
+}

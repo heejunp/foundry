@@ -69,8 +69,7 @@ jobs:
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
 
-          # (1) 백엔드 YAML 파일 수정 (sed 명령어로 이미지 태그 교체)
-          # 기존 태그(무엇이든)를 현재 커밋 해시($GITHUB_SHA)로 변경
+          # (1) 백엔드 YAML 파일 수정
           sed -i "s|image: parkheejun/foundry-backend:.*|image: parkheejun/foundry-backend:${{ env.IMAGE_TAG }}|g" k8s/02-backend.yaml
 
           # (2) 프론트엔드 YAML 파일 수정

@@ -248,3 +248,36 @@ func DeleteProject(projectID string) error {
 	fmt.Printf("[K8s] Deleted project resources for %s\n", projectID)
 	return nil
 }
+
+// GetPodLogs returns the logs of the first pod for a given project
+func GetPodLogs(projectID string) (string, error) {
+	if Client == nil {
+		return "", fmt.Errorf("kubernetes client not initialized")
+	}
+	namespace := "apps"
+
+	// 1. Get Pods for the project
+	pods, err := Client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("project-id=%s", projectID),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list pods: %v", err)
+	}
+
+	if len(pods.Items) == 0 {
+		return "No pods found (deployment might be starting or stopped)", nil
+	}
+
+	// 2. Get Logs from the first pod
+	podName := pods.Items[0].Name
+	req := Client.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		TailLines: func(i int64) *int64 { return &i }(100), // Get last 100 lines
+	})
+	
+	podLogs, err := req.DoRaw(context.TODO())
+	if err != nil {
+		return "", fmt.Errorf("failed to get logs: %v", err)
+	}
+
+	return string(podLogs), nil
+}

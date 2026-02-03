@@ -328,3 +328,28 @@ func UpdateProject(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Project updated successfully"})
 }
+
+// GetProjectLogs returns the runtime logs of the project
+func GetProjectLogs(c echo.Context) error {
+	userID := c.Get("userID").(string)
+	projectID := c.Param("id")
+
+	// Verify ownership first
+	var project model.Project
+	if err := database.DB.Where("id = ? AND owner_id = ?", projectID, userID).First(&project).Error; err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "Project not found or access denied"})
+	}
+
+	if k8s.Client == nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "Kubernetes not connected"})
+	}
+
+	logs, err := k8s.GetPodLogs(projectID)
+	if err != nil {
+		// Just log error and return empty? Or return error
+		// Often failure means pod is crashlooping or absent
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch logs: " + err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, map[string]string{"logs": logs})
+}
