@@ -73,7 +73,7 @@ spec:
         role: apps
       containers:
       - name: backend
-        image: parkheejun/foundry-backend:v1.0-202602041145
+        image: parkheejun/foundry-backend:v1.0-202602041205
         ports:
         - containerPort: 8080
         env:
