@@ -19,12 +19,14 @@ import (
 // For MVP, we might call this immediately assuming the image will exist,
 // OR we should have a controller/poller checking build status.
 // For now, let's just scaffolding it.
-func DeployProject(projectID, name string, envVars map[string]string, targetPort int) (string, error) {
+// DeployProject creates Deployment, Service, and Ingress with Secret-based EnvVars
+// Updated: Uses CreateProjectSecret and EnvFrom for security.
+func DeployProject(projectID, ownerID, name string, envVars map[string]string, targetPort int) (string, error) {
 	if Client == nil {
 		return "", fmt.Errorf("kubernetes client not initialized")
 	}
 
-	namespace := "apps" // User requested 'apps' namespace
+	namespace := "apps"
 	registry := os.Getenv("CONTAINER_REGISTRY")
 	if registry == "" {
 		registry = "foundry-local"
@@ -34,12 +36,13 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
 	labels := map[string]string{
 		"app":         "foundry-app",
 		"project-id":  projectID,
+		"owner-id":    ownerID,
 	}
 
-	// 1. Convert Map to EnvVar slice
-	var k8sEnv []corev1.EnvVar
-	for k, v := range envVars {
-		k8sEnv = append(k8sEnv, corev1.EnvVar{Name: k, Value: v})
+	// 1. Create/Update Secret
+	secretName, err := CreateProjectSecret(namespace, projectID, ownerID, envVars)
+	if err != nil {
+		return "", fmt.Errorf("failed to create secret: %v", err)
 	}
 
 	// 2. Deployment
@@ -65,9 +68,18 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
 						{
 							Name:  "app",
 							Image: imageName,
-							Ports: []corev1.ContainerPort{{ContainerPort: int32(targetPort)}}, // User defined port
-							Env:   k8sEnv,
-							ImagePullPolicy: corev1.PullAlways, // Important for updates
+							Ports: []corev1.ContainerPort{{ContainerPort: int32(targetPort)}},
+							// Use EnvFrom to load all variables from the Secret
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: secretName,
+										},
+									},
+								},
+							},
+							ImagePullPolicy: corev1.PullAlways,
 							Resources: corev1.ResourceRequirements{
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse("1"),
@@ -104,9 +116,7 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
 	}
 
 	// 4. Ingress
-	// Hostname format: project-id.foundry.heejunp.com
 	ingressHost := fmt.Sprintf("%s-foundry.heejunp.com", projectID)
-	
 	pathType := netv1.PathTypePrefix
 	ingressClassName := "nginx"
 
@@ -114,7 +124,6 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
 		ObjectMeta: metav1.ObjectMeta{
 			Name: projectID,
 			Annotations: map[string]string{
-				// "kubernetes.io/ingress.class": "nginx",
 				"cert-manager.io/cluster-issuer": "letsencrypt-prod",
 			},
 		},
@@ -132,9 +141,7 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
 									Backend: netv1.IngressBackend{
 										Service: &netv1.IngressServiceBackend{
 											Name: service.Name,
-											Port: netv1.ServiceBackendPort{
-												Number: 80,
-											},
+											Port: netv1.ServiceBackendPort{ Number: 80 },
 										},
 									},
 								},
@@ -146,25 +153,19 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
 		},
 	}
 
-	// Apply Everything (Create or Update)
-	// Deployment
-	_, err := Client.AppsV1().Deployments(namespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
+	// Apply Deployment
+	_, err = Client.AppsV1().Deployments(namespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
 	if err != nil {
-		// If exists, try Update
 		if _, updateErr := Client.AppsV1().Deployments(namespace).Update(context.TODO(), deployment, metav1.UpdateOptions{}); updateErr != nil {
 			fmt.Printf("[K8s] Deployment create/update error: %v\n", err)
 		}
 	}
 	
-	// Service
-	// Services are immutable in some fields, usually we just ensure it exists or delete/recreate if needed.
-	// For MVP, if port changed, maybe simpler to delete and recreate or patch.
-	// Let's try explicit update for Service (might fail if ClusterIP is not preserved, so we should copy it)
-	
+	// Apply Service
 	existingSvc, err := Client.CoreV1().Services(namespace).Get(context.TODO(), service.Name, metav1.GetOptions{})
 	if err == nil {
 		service.ResourceVersion = existingSvc.ResourceVersion
-		service.Spec.ClusterIP = existingSvc.Spec.ClusterIP // Preserve ClusterIP
+		service.Spec.ClusterIP = existingSvc.Spec.ClusterIP
 		_, err = Client.CoreV1().Services(namespace).Update(context.TODO(), service, metav1.UpdateOptions{})
 	} else {
 		_, err = Client.CoreV1().Services(namespace).Create(context.TODO(), service, metav1.CreateOptions{})
@@ -173,10 +174,9 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
          fmt.Printf("[K8s] Service apply error: %v\n", err)
     }
 
-	// Ingress
+	// Apply Ingress
 	_, err = Client.NetworkingV1().Ingresses(namespace).Create(context.TODO(), ingress, metav1.CreateOptions{})
 	if err != nil {
-		// If exists, update
 		if existingIngress, getErr := Client.NetworkingV1().Ingresses(namespace).Get(context.TODO(), ingress.Name, metav1.GetOptions{}); getErr == nil {
 			ingress.ResourceVersion = existingIngress.ResourceVersion
 			_, err = Client.NetworkingV1().Ingresses(namespace).Update(context.TODO(), ingress, metav1.UpdateOptions{})
@@ -186,8 +186,37 @@ func DeployProject(projectID, name string, envVars map[string]string, targetPort
 		fmt.Printf("[K8s] Ingress apply error: %v\n", err)
 	}
 
-	fmt.Printf("[K8s] Deployed project %s at http://%s\n", name, ingressHost)
+	fmt.Printf("[K8s] Deployed project %s with Secret %s\n", name, secretName)
 	return fmt.Sprintf("http://%s", ingressHost), nil
+}
+
+// CreateProjectSecret creates or updates a Kubernetes Secret for the project
+func CreateProjectSecret(namespace, projectID, ownerID string, envVars map[string]string) (string, error) {
+	// Naming Convention: foundry-secret-{userId}-{projectId}
+	// Warning: ownerID and projectID are UUIDs, so this name will be long but valid.
+	secretName := fmt.Sprintf("foundry-secret-%s-%s", ownerID, projectID)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: secretName,
+			Labels: map[string]string{
+				"project-id": projectID,
+				"owner-id":   ownerID,
+				"managed-by": "foundry",
+			},
+		},
+		StringData: envVars, // StringData auto-encodes to Base64
+		Type:       corev1.SecretTypeOpaque,
+	}
+
+	_, err := Client.CoreV1().Secrets(namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
+	if err != nil {
+		// If exists, update
+		if _, updateErr := Client.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metav1.UpdateOptions{}); updateErr != nil {
+			return "", updateErr
+		}
+	}
+	return secretName, nil
 }
 
 // ScaleProject scales the deployment to the specified replicas
@@ -216,30 +245,43 @@ func ScaleProject(projectID string, replicas int32) error {
 	return nil
 }
 
-// DeleteProject deletes Deployment, Service, and Ingress
+// DeleteProject deletes Deployment, Service, Ingress, and Secret
 func DeleteProject(projectID string) error {
 	if Client == nil {
 		return fmt.Errorf("kubernetes client not initialized")
 	}
 	namespace := "apps"
-
-	// Delete Options (PropagationBackground cleans up child pods)
 	background := metav1.DeletePropagationBackground
 	opts := metav1.DeleteOptions{PropagationPolicy: &background}
-
 	var errs []string
 
-	// Delete Ingress
+	// 1. Delete Ingress
 	if err := Client.NetworkingV1().Ingresses(namespace).Delete(context.TODO(), projectID, opts); err != nil {
 		errs = append(errs, fmt.Sprintf("ingress: %v", err))
 	}
-	// Delete Service
+	// 2. Delete Service
 	if err := Client.CoreV1().Services(namespace).Delete(context.TODO(), projectID, opts); err != nil {
 		errs = append(errs, fmt.Sprintf("service: %v", err))
 	}
-	// Delete Deployment
+	// 3. Delete Deployment
 	if err := Client.AppsV1().Deployments(namespace).Delete(context.TODO(), projectID, opts); err != nil {
 		errs = append(errs, fmt.Sprintf("deployment: %v", err))
+	}
+
+	// 4. Delete Secret
+	// We need to construct the secret name logic again or list secrets by label.
+	// Since we delete by ProjectID, let's use LabelSelector to find the secret.
+	secrets, err := Client.CoreV1().Secrets(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("project-id=%s", projectID),
+	})
+	if err == nil {
+		for _, s := range secrets.Items {
+			if err := Client.CoreV1().Secrets(namespace).Delete(context.TODO(), s.Name, opts); err != nil {
+				errs = append(errs, fmt.Sprintf("secret %s: %v", s.Name, err))
+			}
+		}
+	} else {
+		errs = append(errs, fmt.Sprintf("list secrets: %v", err))
 	}
 
 	if len(errs) > 0 {

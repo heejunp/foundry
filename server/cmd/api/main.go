@@ -59,6 +59,11 @@ func main() {
 	api.GET("/projects/:id/logs", handler.GetProjectLogs)
 	api.PATCH("/projects/:id", handler.UpdateProject)
 	api.DELETE("/projects/:id", handler.DeleteProject)
+
+    // Environments
+    api.GET("/environments", handler.GetEnvironments)
+    api.POST("/environments", handler.CreateEnvironment)
+    api.DELETE("/environments/:id", handler.DeleteEnvironment)
 	
 	api.POST("/projects/:id/like", handler.ToggleLike)
 	api.POST("/projects/:id/favorite", handler.ToggleFavorite)

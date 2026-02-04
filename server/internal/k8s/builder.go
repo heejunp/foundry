@@ -15,7 +15,7 @@ import (
 )
 
 // TriggerBuild creates a Kaniko Job to build the project and watches it
-func TriggerBuild(projectID, projectName, repoURL, branch, token string, envVars map[string]string, port int) error {
+func TriggerBuild(projectID, ownerID, projectName, repoURL, branch, token string, envVars map[string]string, port int) error {
 	if Client == nil {
 		return fmt.Errorf("kubernetes client not initialized")
 	}
@@ -135,7 +135,7 @@ func TriggerBuild(projectID, projectName, repoURL, branch, token string, envVars
 					updateProjectStatus(projectID, "deploying", "")
 
 					// Trigger Deployment
-					deployURL, err := DeployProject(projectID, projectName, envVars, port)
+					deployURL, err := DeployProject(projectID, ownerID, projectName, envVars, port)
 					
 					if err != nil {
 						fmt.Printf("[K8s] Deploy failed for %s: %v\n", projectName, err)

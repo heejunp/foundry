@@ -33,8 +33,27 @@ type Project struct {
 	IsLiked     bool `gorm:"-" json:"isLiked"`
 	IsFavorited bool `gorm:"-" json:"isFavorited"`
 
+    // M2M Relation for Reusable Envs
+    Environments []Environment `gorm:"many2many:project_environments;" json:"environments,omitempty"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type Environment struct {
+    ID        string           `gorm:"primaryKey;type:uuid;default:uuid_generate_v4()" json:"id"`
+    Name      string           `gorm:"not null" json:"name"`
+    OwnerID   string           `gorm:"type:uuid;not null" json:"ownerId"`
+    Variables []EnvironmentVar `gorm:"foreignKey:EnvironmentID" json:"variables"`
+    CreatedAt time.Time        `json:"createdAt"`
+    UpdatedAt time.Time        `json:"updatedAt"`
+}
+
+type EnvironmentVar struct {
+    ID            uint   `gorm:"primaryKey" json:"id"`
+    EnvironmentID string `gorm:"type:uuid;not null" json:"-"`
+    Key           string `gorm:"not null" json:"key"`
+    Value         string `gorm:"not null" json:"value"`
 }
 
 type InviteCode struct {
@@ -48,7 +67,7 @@ type InviteCode struct {
 // ProjectEnv represents environment variables
 type ProjectEnv struct {
     ID        uint      `gorm:"primaryKey" json:"id"`
-    ProjectID string    `gorm:"not null" json:"projectId"`
+    ProjectID string    `gorm:"not null;type:uuid" json:"projectId"`
     Key       string    `gorm:"not null" json:"key"`
     Value     string    `gorm:"not null" json:"value"`
     CreatedAt time.Time `json:"createdAt"`
@@ -61,7 +80,8 @@ type CreateProjectRequest struct {
 	RepoURL string            `json:"repoUrl"`
 	Port    int               `json:"port"`
     Branch  string            `json:"branch"`
-    	EnvVars []EnvVarRequest   `json:"envVars"`
+    EnvVars []EnvVarRequest   `json:"envVars"`
+    EnvironmentIDs []string   `json:"environmentIds"`
 }
 
 type UpdateProjectRequest struct {

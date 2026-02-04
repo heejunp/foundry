@@ -32,8 +32,11 @@ func InitDB() {
 
 	log.Println("Connected to PostgreSQL")
 	
-	// AutoMigrate to sync schema
-	if err := DB.AutoMigrate(&model.User{}, &model.Project{}, &model.ProjectEnv{}); err != nil {
+	// 1. Enable uuid-ossp extension
+	DB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
+
+	// 2. AutoMigrate to sync schema
+	if err := DB.AutoMigrate(&model.User{}, &model.Project{}, &model.ProjectEnv{}, &model.Environment{}, &model.EnvironmentVar{}); err != nil {
 		log.Printf("Failed to migrate database: %v", err)
 	}
 }

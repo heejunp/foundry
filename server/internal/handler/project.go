@@ -132,7 +132,7 @@ func CreateProject(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to create project"})
 	}
 
-	// 3. Save Env Vars
+	// 3. Save Env Vars (Custom)
 	envMap := make(map[string]string)
 	for _, env := range req.EnvVars {
 		if env.Key == "" {
@@ -150,6 +150,38 @@ func CreateProject(c echo.Context) error {
 		envMap[env.Key] = env.Value
 	}
 
+    // 4. Link Reusable Environments
+    if len(req.EnvironmentIDs) > 0 {
+        var envs []model.Environment
+        if err := tx.Where("id IN ? AND owner_id = ?", req.EnvironmentIDs, userID).Find(&envs).Error; err != nil {
+             tx.Rollback()
+             return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid environment IDs"})
+        }
+        if err := tx.Model(&project).Association("Environments").Replace(envs); err != nil {
+             tx.Rollback()
+             return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to link environments"})
+        }
+
+        // Merge variables for deployment (Environment Vars first, then Custom Vars override)
+        // We need to fetch variables for these environments
+        var envVars []model.EnvironmentVar
+        if err := tx.Where("environment_id IN ?", req.EnvironmentIDs).Find(&envVars).Error; err != nil {
+            tx.Rollback()
+            return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch environment variables"})
+        }
+        
+        // Base map from reusable envs
+        baseEnvMap := make(map[string]string)
+        for _, v := range envVars {
+            baseEnvMap[v.Key] = v.Value
+        }
+        // Override with custom vars
+        for k, v := range envMap {
+            baseEnvMap[k] = v
+        }
+        envMap = baseEnvMap
+    }
+
 	if err := tx.Commit().Error; err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Transaction commit failed"})
 	}
@@ -157,7 +189,7 @@ func CreateProject(c echo.Context) error {
 	// 4. Trigger K8s Build
 	// Note: Verify k8s client is initialized before calling
 	if k8s.Client != nil {
-		if err := k8s.TriggerBuild(project.ID, project.Name, req.RepoURL, branch, user.AccessToken, envMap, project.Port); err != nil {
+		if err := k8s.TriggerBuild(project.ID, userID, project.Name, req.RepoURL, branch, user.AccessToken, envMap, project.Port); err != nil {
 			// Log error but assume project is created. User can retry build later.
 			// Or update status to error.
 			database.DB.Model(&project).Update("status", "error")
@@ -279,6 +311,7 @@ func UpdateProject(c echo.Context) error {
 		project.Port = req.Port
 		if err := tx.Save(&project).Error; err != nil {
 			tx.Rollback()
+			fmt.Printf("Error updating port: %v\n", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update project"})
 		}
 		shouldRedeploy = true
@@ -289,6 +322,7 @@ func UpdateProject(c echo.Context) error {
 		// Delete old
 		if err := tx.Where("project_id = ?", projectID).Delete(&model.ProjectEnv{}).Error; err != nil {
 			tx.Rollback()
+			fmt.Printf("Error deleting old envs: %v\n", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to clean old env vars"})
 		}
 		// Insert new
@@ -301,6 +335,7 @@ func UpdateProject(c echo.Context) error {
 			}
 			if err := tx.Create(&newEnv).Error; err != nil {
 				tx.Rollback()
+				fmt.Printf("Error creating new env: %v\n", err)
 				return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to save env vars"})
 			}
 		}
@@ -308,20 +343,38 @@ func UpdateProject(c echo.Context) error {
 	}
 
 	if err := tx.Commit().Error; err != nil {
+		fmt.Printf("Transaction commit error: %v\n", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Commit failed"})
 	}
 
 	if shouldRedeploy && k8s.Client != nil {
-		// Fetch current env vars map for deployment
-		var currentEnvs []model.ProjectEnv
-		database.DB.Where("project_id = ?", projectID).Find(&currentEnvs)
+		// Fetch Custom Envs
+		var customEnvs []model.ProjectEnv
+		database.DB.Where("project_id = ?", projectID).Find(&customEnvs)
+		
+		// Fetch Reusable Envs
+		var projectEnvs []model.Environment
+		database.DB.Model(&project).Association("Environments").Find(&projectEnvs)
+		
 		envMap := make(map[string]string)
-		for _, e := range currentEnvs {
+		
+
+		for _, env := range projectEnvs {
+			var vars []model.EnvironmentVar
+			database.DB.Where("environment_id = ?", env.ID).Find(&vars)
+			for _, v := range vars {
+				envMap[v.Key] = v.Value
+			}
+		}
+
+		// 2. Override with Custom Vars
+		for _, e := range customEnvs {
 			envMap[e.Key] = e.Value
 		}
 
 		// Redeploy
-		if _, err := k8s.DeployProject(projectID, project.Name, envMap, project.Port); err != nil {
+		if _, err := k8s.DeployProject(projectID, project.OwnerID, project.Name, envMap, project.Port); err != nil {
+			fmt.Printf("Redeploy error: %v\n", err)
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to redeploy: " + err.Error()})
 		}
 	}
