@@ -123,6 +123,12 @@ spec:
             secretKeyRef:
               name: foundry-secret
               key: FRONTEND_URL
+        # --- 암호화 키 설정 ---
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: foundry-secret
+              key: ENCRYPTION_KEY
         # --- 기타 설정 ---
         - name: PORT
           value: "8080"

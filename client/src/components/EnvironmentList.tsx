@@ -27,6 +27,7 @@ export function EnvironmentList() {
     // Create Form State
     const [newName, setNewName] = useState("")
     const [newVars, setNewVars] = useState<EnvironmentVar[]>([{ key: "", value: "" }])
+    const [viewEnv, setViewEnv] = useState<Environment | null>(null)
 
     useEffect(() => {
         fetchEnvs()
@@ -131,13 +132,25 @@ export function EnvironmentList() {
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {envs.map(env => (
-                    <Card key={env.id}>
+                    <Card 
+                        key={env.id} 
+                        className="cursor-pointer hover:border-primary/50 transition-all hover:shadow-md"
+                        onClick={() => setViewEnv(env)}
+                    >
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium flex items-center gap-2">
                                 <Key className="h-4 w-4" />
                                 {env.name}
                             </CardTitle>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(env.id)} className="h-6 w-6 text-muted-foreground hover:text-destructive">
+                            <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDelete(env.id)
+                                }} 
+                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                            >
                                 <Trash2 className="h-4 w-4" />
                             </Button>
                         </CardHeader>
@@ -154,6 +167,30 @@ export function EnvironmentList() {
                     </Card>
                 ))}
             </div>
+
+            <Dialog open={!!viewEnv} onOpenChange={(open) => !open && setViewEnv(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{viewEnv?.name}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+                        <div className="space-y-2">
+                                <Label>Variables</Label>
+                                <div className="border rounded-md divide-y">
+                                {viewEnv?.variables.map((v, i) => (
+                                    <div key={i} className="flex items-center justify-between p-3">
+                                        <div className="font-mono text-sm font-medium">{v.key}</div>
+                                        <div className="font-mono text-sm text-muted-foreground tracking-widest">********</div>
+                                    </div>
+                                ))}
+                                {viewEnv?.variables.length === 0 && (
+                                    <div className="p-4 text-center text-sm text-muted-foreground">No variables defined.</div>
+                                )}
+                                </div>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

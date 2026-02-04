@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Check, Loader2, Plus, Terminal } from "lucide-react"
 
@@ -20,29 +20,62 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+
+interface EnvironmentShort {
+    id: string
+    name: string
+}
 
 export function NewProjectPage() {
   const navigate = useNavigate()
   const [repoUrl, setRepoUrl] = useState("")
   const [projectName, setProjectName] = useState("")
-  const [branch, setBranch] = useState("main") // Default branch
+  const [branch, setBranch] = useState("main")
   const [port, setPort] = useState("80")
   const [isValidating, setIsValidating] = useState(false)
   const [isValidRepo, setIsValidRepo] = useState<boolean | null>(null)
   
-  // Environment Variables State
-  const [envVars, setEnvVars] = useState<{ key: string; value: string }[]>([])
-  const [newEnvKey, setNewEnvKey] = useState("")
-  const [newEnvValue, setNewEnvValue] = useState("")
+  // Available Envs for Selection
+  const [availableEnvs, setAvailableEnvs] = useState<EnvironmentShort[]>([])
+  const [selectedEnvIds, setSelectedEnvIds] = useState<string[]>([])
 
-  // 1. Repo Validation Logic
+  // New Environment Group Creation
+  const [isCreateEnvOpen, setIsCreateEnvOpen] = useState(false)
+  const [newEnvGroupName, setNewEnvGroupName] = useState("")
+  const [newEnvGroupVars, setNewEnvGroupVars] = useState<{ key: string; value: string }[]>([{ key: "", value: "" }])
+
+  useEffect(() => {
+    const token = localStorage.getItem("foundry_token")
+    if (!token) {
+        navigate("/login")
+        return
+    }
+    fetchAvailableEnvs()
+  }, [navigate])
+
+  const fetchAvailableEnvs = async () => {
+      try {
+          const token = localStorage.getItem("foundry_token")
+          const res = await fetch("/api/environments", { headers: { "X-User-ID": token || "" } })
+          if (res.ok) setAvailableEnvs(await res.json())
+      } catch (e) { console.error(e) }
+  }
+
+  // Repo Validation Logic
   const handleRepoBlur = async () => {
     if (!repoUrl) return
     setIsValidating(true)
     setIsValidRepo(null)
 
-    // Parse project name from URL if empty
-    // e.g., https://github.com/user/my-project -> my-project
     const parts = repoUrl.split("/")
     const potentialName = parts[parts.length - 1]?.replace(".git", "")
     if (!projectName && potentialName) {
@@ -50,44 +83,62 @@ export function NewProjectPage() {
     }
 
     try {
-        // Mock validation for now (In real app, call backend to check git ls-remote)
-        // Just simulate a check delay
         await new Promise(resolve => setTimeout(resolve, 800))
-        
-        // Simple regex check for now
         const isGithub = repoUrl.includes("github.com")
         setIsValidRepo(isGithub)
-    } catch (e) {
+    } catch {
         setIsValidRepo(false)
     } finally {
         setIsValidating(false)
     }
   }
 
-  // 2. Env Var Logic
-  const addEnvVar = () => {
-    if (newEnvKey && newEnvValue) {
-      setEnvVars([...envVars, { key: newEnvKey, value: newEnvValue }])
-      setNewEnvKey("")
-      setNewEnvValue("")
-    }
+  const toggleEnvSelection = (id: string) => {
+      if (selectedEnvIds.includes(id)) {
+          setSelectedEnvIds(selectedEnvIds.filter(e => e !== id))
+      } else {
+          setSelectedEnvIds([...selectedEnvIds, id])
+      }
   }
 
-  const removeEnvVar = (index: number) => {
-    setEnvVars(envVars.filter((_, i) => i !== index))
+  const handleCreateEnvGroup = async () => {
+      if (!newEnvGroupName) return
+      
+      try {
+          const token = localStorage.getItem("foundry_token")
+          const res = await fetch("/api/environments", {
+              method: "POST",
+              headers: { 
+                  "Content-Type": "application/json",
+                  "X-User-ID": token || "" 
+              },
+              body: JSON.stringify({
+                  name: newEnvGroupName,
+                  variables: newEnvGroupVars.filter(v => v.key && v.value)
+              })
+          })
+          
+          if (res.ok) {
+              const newEnv = await res.json()
+              setAvailableEnvs([...availableEnvs, newEnv])
+              setSelectedEnvIds([...selectedEnvIds, newEnv.id])
+              setIsCreateEnvOpen(false)
+              setNewEnvGroupName("")
+              setNewEnvGroupVars([{ key: "", value: "" }])
+          }
+      } catch (e) {
+          console.error(e)
+      }
   }
 
   const handleSubmit = async () => {
-      // Create Project logic here
-      console.log("Creating project:", { repoUrl, projectName, branch, envVars })
-      
       const token = localStorage.getItem("foundry_token")
       if (!token) {
           navigate("/login")
           return
       }
 
-      setIsValidating(true) // Reuse state for loading
+      setIsValidating(true)
       
       try {
         const res = await fetch(`/api/projects`, {
@@ -101,7 +152,8 @@ export function NewProjectPage() {
                 repoUrl: repoUrl,
                 branch: branch,
                 port: parseInt(port) || 80,
-                envVars: envVars
+                envVars: [], // No custom vars, only environment groups
+                environmentIds: selectedEnvIds,
             })
         })
 
@@ -115,9 +167,9 @@ export function NewProjectPage() {
         
         navigate("/mypage")
 
-      } catch (e: any) {
+      } catch (e: unknown) {
           console.error("Failed to create project:", e)
-          alert(e.message || "Something went wrong")
+          alert((e as Error).message || "Something went wrong")
       } finally {
           setIsValidating(false)
       }
@@ -152,13 +204,12 @@ export function NewProjectPage() {
                   value={repoUrl}
                   onChange={(e) => {
                       setRepoUrl(e.target.value)
-                      setIsValidRepo(null) // Reset validation
+                      setIsValidRepo(null)
                   }}
                   onBlur={handleRepoBlur}
                   className={isValidRepo === true ? "border-green-500 ring-green-500/20 pr-10" : ""}
                 />
                 
-                {/* Validation Icons */}
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                     {isValidating && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
                     {!isValidating && isValidRepo === true && <Check className="h-4 w-4 text-green-500" />}
@@ -210,54 +261,91 @@ export function NewProjectPage() {
                 </div>
             </div>
 
-            {/* 3. Environment Variables */}
+            {/* 3. Environment Groups */}
             <div className="space-y-4 pt-4 border-t">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-medium">Environment Variables</h3>
-                </div>
-                
-                {/* List of added vars */}
-                {envVars.length > 0 && (
-                    <div className="rounded-md border bg-muted/30 p-2 space-y-2">
-                        {envVars.map((env, i) => (
-                            <div key={i} className="flex items-center gap-2 text-sm p-2 bg-background rounded-sm border">
-                                <span className="font-mono font-semibold text-xs text-muted-foreground">KEY:</span>
-                                <span className="font-mono flex-1">{env.key}</span>
-                                <span className="font-mono font-semibold text-xs text-muted-foreground">VAL:</span>
-                                <span className="font-mono flex-1 truncate text-muted-foreground">{env.value}</span>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeEnvVar(i)}>
-                                    <Plus className="h-4 w-4 rotate-45" /> 
+                <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                        <Label>Environment Groups (Secrets)</Label>
+                        <Dialog open={isCreateEnvOpen} onOpenChange={setIsCreateEnvOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" size="sm">
+                                    <Plus className="mr-2 h-3 w-3" /> New Group
                                 </Button>
-                            </div>
+                            </DialogTrigger>
+                            <DialogContent className="max-h-[85vh] overflow-y-auto">
+                                <DialogHeader>
+                                    <DialogTitle>Create Environment Group</DialogTitle>
+                                    <DialogDescription>
+                                        Create a reusable set of environment variables that can be shared across projects.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4 py-4">
+                                    <div className="space-y-2">
+                                        <Label>Group Name</Label>
+                                        <Input 
+                                            value={newEnvGroupName} 
+                                            onChange={e => setNewEnvGroupName(e.target.value)} 
+                                            placeholder="e.g. Production Database" 
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Variables</Label>
+                                        {newEnvGroupVars.map((v, i) => (
+                                            <div key={i} className="flex gap-2">
+                                                <Input 
+                                                    placeholder="KEY" 
+                                                    value={v.key} 
+                                                    onChange={e => {
+                                                        const vars = [...newEnvGroupVars]
+                                                        vars[i].key = e.target.value
+                                                        setNewEnvGroupVars(vars)
+                                                    }} 
+                                                    className="font-mono text-xs"
+                                                />
+                                                <Input 
+                                                    placeholder="VALUE" 
+                                                    value={v.value} 
+                                                    onChange={e => {
+                                                        const vars = [...newEnvGroupVars]
+                                                        vars[i].value = e.target.value
+                                                        setNewEnvGroupVars(vars)
+                                                    }} 
+                                                    className="font-mono text-xs"
+                                                />
+                                            </div>
+                                        ))}
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            onClick={() => setNewEnvGroupVars([...newEnvGroupVars, { key: "", value: "" }])} 
+                                            className="w-full"
+                                        >
+                                            Add Variable
+                                        </Button>
+                                    </div>
+                                    <Button onClick={handleCreateEnvGroup} className="w-full" disabled={!newEnvGroupName}>
+                                        Create & Attach
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+                    <div className="flex flex-wrap gap-2 border p-3 rounded-md min-h-[60px] content-start bg-muted/20">
+                        {availableEnvs.length === 0 && <span className="text-xs text-muted-foreground w-full text-center py-2">No environment groups found. Create one to get started!</span>}
+                        {availableEnvs.map(env => (
+                            <Badge 
+                                key={env.id} 
+                                variant={selectedEnvIds.includes(env.id) ? "default" : "outline"}
+                                className="cursor-pointer select-none hover:bg-primary/80 transition-colors"
+                                onClick={() => toggleEnvSelection(env.id)}
+                            >
+                                {env.name}
+                            </Badge>
                         ))}
                     </div>
-                )}
-
-                {/* Add New Var Form */}
-                <div className="flex gap-2 items-end">
-                    <div className="grid grid-cols-2 gap-2 flex-1">
-                        <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Key</Label>
-                            <Input 
-                                placeholder="API_KEY" 
-                                className="font-mono text-sm"
-                                value={newEnvKey}
-                                onChange={(e) => setNewEnvKey(e.target.value)}
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <Label className="text-xs text-muted-foreground">Value</Label>
-                            <Input 
-                                placeholder="secret_123..." 
-                                className="font-mono text-sm" 
-                                value={newEnvValue}
-                                onChange={(e) => setNewEnvValue(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <Button variant="secondary" onClick={addEnvVar} disabled={!newEnvKey || !newEnvValue}>
-                        <Plus className="h-4 w-4" />
-                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                        Select environment groups to attach to this project. Environment variables from selected groups will be merged and injected as Kubernetes Secrets.
+                    </p>
                 </div>
             </div>
 

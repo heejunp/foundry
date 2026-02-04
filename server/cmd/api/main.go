@@ -51,9 +51,9 @@ func main() {
 	api.GET("/me", handler.GetMe)
 	api.DELETE("/me", handler.DeleteAccount)
 	
-	api.GET("/projects/my", handler.GetMyProjects)
+	api.GET("/my/projects", handler.GetMyProjects)
 	api.POST("/projects", handler.CreateProject)
-	api.POST("/projects", handler.CreateProject)
+
 	api.GET("/projects/:id", handler.GetProject)
 	api.GET("/projects/:id/stats", handler.GetProjectStats)
 	api.GET("/projects/:id/logs", handler.GetProjectLogs)

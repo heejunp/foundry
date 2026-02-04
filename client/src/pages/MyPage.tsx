@@ -69,7 +69,6 @@ export function MyPage() {
   const [repoUrl, setRepoUrl] = useState("")
   const [port, setPort] = useState(80)
   const [branch, setBranch] = useState("main")
-  const [envVars, setEnvVars] = useState([{ key: "", value: "" }])
   const [selectedEnvIds, setSelectedEnvIds] = useState<string[]>([])
   
   // Available Envs for Selection
@@ -121,7 +120,7 @@ export function MyPage() {
           repoUrl,
           port,
           branch,
-          envVars: envVars.filter((e) => e.key && e.value),
+          envVars: [], // No custom vars, only environment groups
           environmentIds: selectedEnvIds,
         }),
       })
@@ -134,7 +133,6 @@ export function MyPage() {
         setRepoUrl("")
         setPort(80)
         setBranch("main")
-        setEnvVars([{ key: "", value: "" }])
         setSelectedEnvIds([])
       } else {
         alert("Failed to create project")
@@ -253,42 +251,6 @@ export function MyPage() {
                                                 </Badge>
                                             ))}
                                         </div>
-                                    </div>
-
-                                    <div className="grid gap-2">
-                                        <Label>Custom Environment Variables</Label>
-                                        {envVars.map((env, i) => (
-                                            <div key={i} className="flex gap-2">
-                                                <Input
-                                                    placeholder="KEY"
-                                                    value={env.key}
-                                                    onChange={(e) => {
-                                                        const newEnvs = [...envVars]
-                                                        newEnvs[i].key = e.target.value
-                                                        setEnvVars(newEnvs)
-                                                    }}
-                                                    className="font-mono text-xs"
-                                                />
-                                                <Input
-                                                    placeholder="VALUE"
-                                                    value={env.value}
-                                                    onChange={(e) => {
-                                                        const newEnvs = [...envVars]
-                                                        newEnvs[i].value = e.target.value
-                                                        setEnvVars(newEnvs)
-                                                    }}
-                                                    className="font-mono text-xs"
-                                                />
-                                            </div>
-                                        ))}
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setEnvVars([...envVars, { key: "", value: "" }])}
-                                        >
-                                            Add Variable
-                                        </Button>
                                     </div>
                                 </div>
                                 <DialogFooter>

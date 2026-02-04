@@ -191,9 +191,9 @@ func DeployProject(projectID, ownerID, name string, envVars map[string]string, t
 }
 
 // CreateProjectSecret creates or updates a Kubernetes Secret for the project
+// Naming Convention: foundry-secret-{ownerID}-{projectID}
+// This function implements proper upsert logic to ensure secrets are always up-to-date
 func CreateProjectSecret(namespace, projectID, ownerID string, envVars map[string]string) (string, error) {
-	// Naming Convention: foundry-secret-{userId}-{projectId}
-	// Warning: ownerID and projectID are UUIDs, so this name will be long but valid.
 	secretName := fmt.Sprintf("foundry-secret-%s-%s", ownerID, projectID)
 
 	secret := &corev1.Secret{
@@ -203,20 +203,97 @@ func CreateProjectSecret(namespace, projectID, ownerID string, envVars map[strin
 				"project-id": projectID,
 				"owner-id":   ownerID,
 				"managed-by": "foundry",
+				"type":       "project-secret",
 			},
 		},
 		StringData: envVars, // StringData auto-encodes to Base64
 		Type:       corev1.SecretTypeOpaque,
 	}
 
+	// Try to create the secret
 	_, err := Client.CoreV1().Secrets(namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
 	if err != nil {
-		// If exists, update
-		if _, updateErr := Client.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metav1.UpdateOptions{}); updateErr != nil {
-			return "", updateErr
+		// Secret already exists, fetch it to get ResourceVersion for update
+		existingSecret, getErr := Client.CoreV1().Secrets(namespace).Get(context.TODO(), secretName, metav1.GetOptions{})
+		if getErr != nil {
+			return "", fmt.Errorf("failed to create or get existing secret: create_err=%v, get_err=%v", err, getErr)
 		}
+
+		// Update the secret with new data, preserving ResourceVersion
+		secret.ResourceVersion = existingSecret.ResourceVersion
+		_, updateErr := Client.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metav1.UpdateOptions{})
+		if updateErr != nil {
+			return "", fmt.Errorf("failed to update secret %s: %v", secretName, updateErr)
+		}
+		fmt.Printf("[K8s] Updated project secret: %s (variables: %d)\n", secretName, len(envVars))
+	} else {
+		fmt.Printf("[K8s] Created project secret: %s (variables: %d)\n", secretName, len(envVars))
 	}
+
 	return secretName, nil
+}
+
+// CreateEnvironmentSecret creates or updates a Secret for a reusable environment group
+// Naming Convention: foundry-env-{envID}
+// This function implements proper upsert logic to ensure secrets are always up-to-date
+func CreateEnvironmentSecret(envID, ownerID string, envVars map[string]string) error {
+	if Client == nil {
+		return fmt.Errorf("kubernetes client not initialized")
+	}
+	namespace := "apps"
+	secretName := fmt.Sprintf("foundry-env-%s", envID)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: secretName,
+			Labels: map[string]string{
+				"environment-id": envID,
+				"owner-id":       ownerID,
+				"type":           "environment-group",
+				"managed-by":     "foundry",
+			},
+		},
+		StringData: envVars,
+		Type:       corev1.SecretTypeOpaque,
+	}
+
+	// Try to create the secret
+	_, err := Client.CoreV1().Secrets(namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
+	if err != nil {
+		// Secret already exists, fetch it to get ResourceVersion for update
+		existingSecret, getErr := Client.CoreV1().Secrets(namespace).Get(context.TODO(), secretName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("failed to create or get existing secret: create_err=%v, get_err=%v", err, getErr)
+		}
+
+		// Update the secret with new data, preserving ResourceVersion
+		secret.ResourceVersion = existingSecret.ResourceVersion
+		_, updateErr := Client.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metav1.UpdateOptions{})
+		if updateErr != nil {
+			return fmt.Errorf("failed to update secret %s: %v", secretName, updateErr)
+		}
+		fmt.Printf("[K8s] Updated environment secret: %s (variables: %d)\n", secretName, len(envVars))
+	} else {
+		fmt.Printf("[K8s] Created environment secret: %s (variables: %d)\n", secretName, len(envVars))
+	}
+
+	return nil
+}
+
+// DeleteEnvironmentSecret deletes the secret for an environment group
+func DeleteEnvironmentSecret(envID string) error {
+	if Client == nil {
+		return nil
+	}
+	namespace := "apps"
+	secretName := fmt.Sprintf("foundry-env-%s", envID)
+	
+	err := Client.CoreV1().Secrets(namespace).Delete(context.TODO(), secretName, metav1.DeleteOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to delete secret %s: %v", secretName, err)
+	}
+	fmt.Printf("[K8s] Deleted environment secret: %s\n", secretName)
+	return nil
 }
 
 // ScaleProject scales the deployment to the specified replicas

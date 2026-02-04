@@ -1,7 +1,12 @@
 package model
 
 import (
+	"fmt"
 	"time"
+
+	"foundry-server/internal/crypto"
+
+	"gorm.io/gorm"
 )
 
 type User struct {
@@ -53,7 +58,38 @@ type EnvironmentVar struct {
     ID            uint   `gorm:"primaryKey" json:"id"`
     EnvironmentID string `gorm:"type:uuid;not null" json:"-"`
     Key           string `gorm:"not null" json:"key"`
-    Value         string `gorm:"not null" json:"value"`
+    Value         string `gorm:"not null" json:"value"` // Stored encrypted in DB
+}
+
+// BeforeSave hook - encrypt value before saving to database
+func (ev *EnvironmentVar) BeforeSave(tx *gorm.DB) error {
+    if ev.Value == "" {
+        return nil
+    }
+    
+    encrypted, err := crypto.Encrypt(ev.Value)
+    if err != nil {
+        return fmt.Errorf("failed to encrypt environment variable: %v", err)
+    }
+    ev.Value = encrypted
+    return nil
+}
+
+// AfterFind hook - decrypt value after loading from database
+func (ev *EnvironmentVar) AfterFind(tx *gorm.DB) error {
+    if ev.Value == "" {
+        return nil
+    }
+    
+    decrypted, err := crypto.Decrypt(ev.Value)
+    if err != nil {
+        // If decryption fails, it might be plaintext (migration scenario)
+        // Log the error but don't fail - allows gradual migration
+        fmt.Printf("[WARN] Failed to decrypt environment variable ID %d: %v\n", ev.ID, err)
+        return nil
+    }
+    ev.Value = decrypted
+    return nil
 }
 
 type InviteCode struct {
@@ -69,8 +105,37 @@ type ProjectEnv struct {
     ID        uint      `gorm:"primaryKey" json:"id"`
     ProjectID string    `gorm:"not null;type:uuid" json:"projectId"`
     Key       string    `gorm:"not null" json:"key"`
-    Value     string    `gorm:"not null" json:"value"`
+    Value     string    `gorm:"not null" json:"value"` // Stored encrypted in DB
     CreatedAt time.Time `json:"createdAt"`
+}
+
+// BeforeSave hook - encrypt value before saving to database
+func (pe *ProjectEnv) BeforeSave(tx *gorm.DB) error {
+    if pe.Value == "" {
+        return nil
+    }
+    
+    encrypted, err := crypto.Encrypt(pe.Value)
+    if err != nil {
+        return fmt.Errorf("failed to encrypt project env variable: %v", err)
+    }
+    pe.Value = encrypted
+    return nil
+}
+
+// AfterFind hook - decrypt value after loading from database
+func (pe *ProjectEnv) AfterFind(tx *gorm.DB) error {
+    if pe.Value == "" {
+        return nil
+    }
+    
+    decrypted, err := crypto.Decrypt(pe.Value)
+    if err != nil {
+        fmt.Printf("[WARN] Failed to decrypt project env variable ID %d: %v\n", pe.ID, err)
+        return nil
+    }
+    pe.Value = decrypted
+    return nil
 }
 
 // DTOs

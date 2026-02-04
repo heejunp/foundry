@@ -2,6 +2,7 @@ package handler
 
 import (
 	"foundry-server/internal/database"
+	"foundry-server/internal/k8s"
 	"foundry-server/internal/model"
 	"net/http"
 
@@ -65,6 +66,21 @@ func CreateEnvironment(c echo.Context) error {
 	// Reload with variables
 	database.DB.Preload("Variables").First(&env, "id = ?", env.ID)
 
+	// Create K8s Secret for this group (if k8s is active)
+	if k8s.Client != nil {
+		envMap := make(map[string]string)
+		for _, v := range req.Variables {
+			if v.Key != "" {
+				envMap[v.Key] = v.Value
+			}
+		}
+		if err := k8s.CreateEnvironmentSecret(env.ID, userID, envMap); err != nil {
+			// Log error but don't fail the request (or maybe we should?)
+			// For now, let's just log it.
+			c.Logger().Errorf("Failed to create K8s secret for env %s: %v", env.ID, err)
+		}
+	}
+
 	return c.JSON(http.StatusCreated, env)
 }
 
@@ -81,6 +97,13 @@ func DeleteEnvironment(c echo.Context) error {
 
 	if err := database.DB.Delete(&env).Error; err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete environment"})
+	}
+
+	// Delete K8s Secret
+	if k8s.Client != nil {
+		if err := k8s.DeleteEnvironmentSecret(id); err != nil {
+			c.Logger().Errorf("Failed to delete K8s secret for env %s: %v", id, err)
+		}
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "Environment deleted"})
