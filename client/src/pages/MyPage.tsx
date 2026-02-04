@@ -45,6 +45,7 @@ interface Project {
   repoUrl: string
   status: string
   deployUrl: string
+  port: number
   createdAt: string
 }
 

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { Plus, Trash2, Key } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 
@@ -20,7 +20,7 @@ interface Environment {
 
 export function EnvironmentList() {
     const [envs, setEnvs] = useState<Environment[]>([])
-    const [loading, setLoading] = useState(true)
+    // Removed loading state as it was unused in render
     const [isCreateOpen, setIsCreateOpen] = useState(false)
     const token = localStorage.getItem("foundry_token")
 
@@ -40,8 +40,6 @@ export function EnvironmentList() {
             if (res.ok) setEnvs(await res.json())
         } catch (error) {
             console.error(error)
-        } finally {
-            setLoading(false)
         }
     }
 
