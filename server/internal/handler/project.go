@@ -152,13 +152,20 @@ func CreateProject(c echo.Context) error {
 
     // 4. Link Reusable Environments
     if len(req.EnvironmentIDs) > 0 {
+        c.Logger().Infof("Linking %d environment groups to project %s", len(req.EnvironmentIDs), project.ID)
+        
         var envs []model.Environment
         if err := tx.Where("id IN ? AND owner_id = ?", req.EnvironmentIDs, userID).Find(&envs).Error; err != nil {
              tx.Rollback()
+             c.Logger().Errorf("Failed to find environments: %v", err)
              return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid environment IDs"})
         }
+        
+        c.Logger().Infof("Found %d environments", len(envs))
+        
         if err := tx.Model(&project).Association("Environments").Replace(envs); err != nil {
              tx.Rollback()
+             c.Logger().Errorf("Failed to link environments: %v", err)
              return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to link environments"})
         }
 
@@ -167,19 +174,36 @@ func CreateProject(c echo.Context) error {
         var envVars []model.EnvironmentVar
         if err := tx.Where("environment_id IN ?", req.EnvironmentIDs).Find(&envVars).Error; err != nil {
             tx.Rollback()
+            c.Logger().Errorf("Failed to fetch environment variables: %v", err)
             return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch environment variables"})
         }
         
-        // Base map from reusable envs
+        c.Logger().Infof("Found %d environment variables from groups", len(envVars))
+        
+        // Base map from reusable envs (these are already decrypted by AfterFind hook)
         baseEnvMap := make(map[string]string)
         for _, v := range envVars {
-            baseEnvMap[v.Key] = v.Value
+            if v.Key != "" {
+                baseEnvMap[v.Key] = v.Value
+                c.Logger().Debugf("Loaded env var from group: %s", v.Key)
+            }
         }
+        
+        c.Logger().Infof("Loaded %d variables from environment groups", len(baseEnvMap))
+        
         // Override with custom vars
+        customCount := 0
         for k, v := range envMap {
             baseEnvMap[k] = v
+            customCount++
         }
+        
+        if customCount > 0 {
+            c.Logger().Infof("Added %d custom variables", customCount)
+        }
+        
         envMap = baseEnvMap
+        c.Logger().Infof("Total environment variables for deployment: %d", len(envMap))
     }
 
 	if err := tx.Commit().Error; err != nil {
