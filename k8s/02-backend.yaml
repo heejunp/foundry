@@ -19,14 +19,18 @@ rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log"]
     verbs: ["get", "list", "watch"]
-  # 3. 배포(Deployment)와 서비스(Service)를 만들 권한 (Deploy 기능용)
+  # 3. Secrets 관리 권한 (환경변수 그룹용)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # 4. 배포(Deployment)와 서비스(Service)를 만들 권한 (Deploy 기능용)
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["services"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  # 4. 인그레스 설정 권한 (도메인 연결용)
+  # 5. 인그레스 설정 권한 (도메인 연결용)
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
