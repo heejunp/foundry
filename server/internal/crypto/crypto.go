@@ -17,9 +17,26 @@ func GetEncryptionKey() []byte {
 	if key == "" {
 		// WARNING: This is a fallback for development only!
 		// In production, you MUST set ENCRYPTION_KEY environment variable
-		key = "foundry-default-32byte-key!!" // 32 bytes for AES-256
+		// This key is exactly 32 bytes for AES-256
+		key = "foundry-dev-key-32bytes-long!!"
 	}
-	return []byte(key)
+	
+	keyBytes := []byte(key)
+	
+	// Ensure key is exactly 32 bytes for AES-256
+	if len(keyBytes) != 32 {
+		// Pad or truncate to 32 bytes
+		if len(keyBytes) < 32 {
+			// Pad with zeros
+			padded := make([]byte, 32)
+			copy(padded, keyBytes)
+			return padded
+		}
+		// Truncate to 32 bytes
+		return keyBytes[:32]
+	}
+	
+	return keyBytes
 }
 
 // Encrypt encrypts plaintext using AES-256-GCM

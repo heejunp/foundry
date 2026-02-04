@@ -74,6 +74,11 @@ export function MyPage() {
   // Available Envs for Selection
   const [availableEnvs, setAvailableEnvs] = useState<EnvironmentShort[]>([])
 
+  // New Environment Group Creation (for inline creation in project dialog)
+  const [isCreateEnvOpen, setIsCreateEnvOpen] = useState(false)
+  const [newEnvGroupName, setNewEnvGroupName] = useState("")
+  const [newEnvGroupVars, setNewEnvGroupVars] = useState<{ key: string; value: string }[]>([{ key: "", value: "" }])
+
   const token = localStorage.getItem("foundry_token")
 
   useEffect(() => {
@@ -106,6 +111,37 @@ export function MyPage() {
           if (res.ok) setAvailableEnvs(await res.json())
       } catch (e) { console.error(e) }
   }
+
+  const handleCreateEnvGroup = async () => {
+      if (!newEnvGroupName) return
+      
+      try {
+          const res = await fetch("/api/environments", {
+              method: "POST",
+              headers: { 
+                  "Content-Type": "application/json",
+                  "X-User-ID": token || "" 
+              },
+              body: JSON.stringify({
+                  name: newEnvGroupName,
+                  variables: newEnvGroupVars.filter(v => v.key && v.value)
+              })
+          })
+          
+          if (res.ok) {
+              const newEnv = await res.json()
+              setAvailableEnvs([...availableEnvs, newEnv])
+              setSelectedEnvIds([...selectedEnvIds, newEnv.id])
+              setIsCreateEnvOpen(false)
+              setNewEnvGroupName("")
+              setNewEnvGroupVars([{ key: "", value: "" }])
+              await fetchAvailableEnvs() // Refresh list
+          }
+      } catch (e) {
+          console.error(e)
+      }
+  }
+
 
   const handleCreateProject = async () => {
     try {
@@ -235,11 +271,77 @@ export function MyPage() {
                                         </div>
                                     </div>
                                     
+                                    
                                     {/* Environment Selection */}
                                     <div className="grid gap-2">
-                                        <Label>Attach Environments (Secrets)</Label>
+                                        <div className="flex items-center justify-between">
+                                            <Label>Environment Groups (Secrets)</Label>
+                                            <Dialog open={isCreateEnvOpen} onOpenChange={setIsCreateEnvOpen}>
+                                                <DialogTrigger asChild>
+                                                    <Button variant="outline" size="sm">
+                                                        <Plus className="mr-2 h-3 w-3" /> New Group
+                                                    </Button>
+                                                </DialogTrigger>
+                                                <DialogContent className="max-h-[85vh] overflow-y-auto">
+                                                    <DialogHeader>
+                                                        <DialogTitle>Create Environment Group</DialogTitle>
+                                                        <DialogDescription>
+                                                            Create a reusable set of environment variables that can be shared across projects.
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                    <div className="space-y-4 py-4">
+                                                        <div className="space-y-2">
+                                                            <Label>Group Name</Label>
+                                                            <Input 
+                                                                value={newEnvGroupName} 
+                                                                onChange={e => setNewEnvGroupName(e.target.value)} 
+                                                                placeholder="e.g. Production Database" 
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label>Variables</Label>
+                                                            {newEnvGroupVars.map((v, i) => (
+                                                                <div key={i} className="flex gap-2">
+                                                                    <Input 
+                                                                        placeholder="KEY" 
+                                                                        value={v.key} 
+                                                                        onChange={e => {
+                                                                            const vars = [...newEnvGroupVars]
+                                                                            vars[i].key = e.target.value
+                                                                            setNewEnvGroupVars(vars)
+                                                                        }} 
+                                                                        className="font-mono text-xs"
+                                                                    />
+                                                                    <Input 
+                                                                        placeholder="VALUE" 
+                                                                        value={v.value} 
+                                                                        onChange={e => {
+                                                                            const vars = [...newEnvGroupVars]
+                                                                            vars[i].value = e.target.value
+                                                                            setNewEnvGroupVars(vars)
+                                                                        }} 
+                                                                        className="font-mono text-xs"
+                                                                    />
+                                                                </div>
+                                                            ))}
+                                                            <Button 
+                                                                variant="outline" 
+                                                                size="sm" 
+                                                                onClick={() => setNewEnvGroupVars([...newEnvGroupVars, { key: "", value: "" }])} 
+                                                                className="w-full"
+                                                            >
+                                                                Add Variable
+                                                            </Button>
+                                                        </div>
+                                                        <Button onClick={handleCreateEnvGroup} className="w-full" disabled={!newEnvGroupName}>
+                                                            Create & Attach
+                                                        </Button>
+                                                    </div>
+                                                </DialogContent>
+                                            </Dialog>
+                                        </div>
                                         <div className="flex flex-wrap gap-2 border p-3 rounded-md min-h-[60px] content-start bg-muted/20">
-                                            {availableEnvs.length === 0 && <span className="text-xs text-muted-foreground w-full text-center py-2">No environments found. Create one in Environments tab!</span>}
+                                            {availableEnvs.length === 0 && <span className="text-xs text-muted-foreground w-full text-center py-2">No environment groups found. Create one to get started!</span>}
                                             {availableEnvs.map(env => (
                                                 <Badge 
                                                     key={env.id} 
@@ -251,6 +353,9 @@ export function MyPage() {
                                                 </Badge>
                                             ))}
                                         </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Select environment groups to attach to this project. Environment variables from selected groups will be merged and injected as Kubernetes Secrets.
+                                        </p>
                                     </div>
                                 </div>
                                 <DialogFooter>

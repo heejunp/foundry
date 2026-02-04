@@ -44,6 +44,7 @@ tmp/
 temp/
 *.tmp
 docs/
+scripts/
 
 # Database
 *.db
