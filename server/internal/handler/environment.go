@@ -69,16 +69,26 @@ func CreateEnvironment(c echo.Context) error {
 	// Create K8s Secret for this group (if k8s is active)
 	if k8s.Client != nil {
 		envMap := make(map[string]string)
-		for _, v := range req.Variables {
+		// Use the reloaded env.Variables which are already decrypted by AfterFind hook
+		for _, v := range env.Variables {
 			if v.Key != "" {
 				envMap[v.Key] = v.Value
 			}
 		}
-		if err := k8s.CreateEnvironmentSecret(env.ID, userID, envMap); err != nil {
-			// Log error but don't fail the request (or maybe we should?)
-			// For now, let's just log it.
-			c.Logger().Errorf("Failed to create K8s secret for env %s: %v", env.ID, err)
+		if len(envMap) > 0 {
+			if err := k8s.CreateEnvironmentSecret(env.ID, userID, envMap); err != nil {
+				// Log error with details
+				c.Logger().Errorf("Failed to create K8s secret for env %s: %v", env.ID, err)
+				// Return error to user so they know something went wrong
+				return c.JSON(http.StatusInternalServerError, map[string]string{
+					"error": "Environment created but failed to create Kubernetes secret",
+					"details": err.Error(),
+				})
+			}
+			c.Logger().Infof("Successfully created K8s secret for env %s with %d variables", env.ID, len(envMap))
 		}
+	} else {
+		c.Logger().Warnf("Kubernetes client not initialized, skipping secret creation for env %s", env.ID)
 	}
 
 	return c.JSON(http.StatusCreated, env)
